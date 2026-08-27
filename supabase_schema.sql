@@ -29,12 +29,14 @@ create table if not exists public.patient_histories (
 -- ---------------------------------------------------------------------------
 alter table public.patient_histories enable row level security;
 
+drop policy if exists "Public insert access (hackathon testing)" on public.patient_histories;
 create policy "Public insert access (hackathon testing)"
     on public.patient_histories
     for insert
     to anon, authenticated
     with check (true);
 
+drop policy if exists "Public select access (hackathon testing)" on public.patient_histories;
 create policy "Public select access (hackathon testing)"
     on public.patient_histories
     for select
@@ -51,12 +53,14 @@ on conflict (id) do nothing;
 -- ---------------------------------------------------------------------------
 -- Row Level Security: storage.objects (scoped to medical_documents bucket)
 -- ---------------------------------------------------------------------------
+drop policy if exists "Public insert access to medical_documents (hackathon testing)" on storage.objects;
 create policy "Public insert access to medical_documents (hackathon testing)"
     on storage.objects
     for insert
     to anon, authenticated
     with check (bucket_id = 'medical_documents');
 
+drop policy if exists "Public select access to medical_documents (hackathon testing)" on storage.objects;
 create policy "Public select access to medical_documents (hackathon testing)"
     on storage.objects
     for select

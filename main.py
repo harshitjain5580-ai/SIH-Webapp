@@ -23,10 +23,13 @@ import os
 import uuid
 from typing import List
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 from openai import OpenAI, OpenAIError
 from supabase import Client, create_client
+
+load_dotenv()
 
 logger = logging.getLogger("medikiosk")
 
@@ -93,6 +96,43 @@ class TranscriptRequest(BaseModel):
     transcript: str = Field(description="Raw patient conversation transcript to extract structured history from.")
 
 
+class PatientHistoryRecord(BaseModel):
+    """A row from the patient_histories Supabase table, as returned after insert."""
+
+    id: str = Field(description="UUID primary key of the patient_histories row.")
+    created_at: str = Field(description="Timestamp the row was created, as returned by Postgres.")
+    chief_complaint: str = Field(description="The patient's primary reason for the visit.")
+    hpi_socrates: str = Field(description="Detailed narrative of the History of Present Illness (SOCRATES).")
+    current_medications: List[Medication] = Field(description="Medications the patient is currently taking.")
+    ayush_parameters: AyushParameters = Field(description="AYUSH Dashavidha Pariksha parameters (Prakriti, Vikriti).")
+    red_flags_detected: bool = Field(description="True if emergency red flags were detected.")
+
+
+class ExtractedPrescription(BaseModel):
+    """Structured prescription data extracted from a document image via the OpenAI Vision model."""
+
+    medications: List[Medication] = Field(description="List of medications identified in the prescription image.")
+
+
+class DocumentUploadResult(BaseModel):
+    """Response for /upload-document: the Supabase Storage path plus the extracted prescription data."""
+
+    storage_path: str = Field(
+        description="Path of the uploaded file within the medical_documents Supabase Storage bucket."
+    )
+    extracted_prescription: ExtractedPrescription = Field(
+        description="Structured prescription data extracted by the OpenAI Vision model."
+    )
+
+
+class WaitingRoomResponse(BaseModel):
+    """Response for GET /api/v1/waiting-room: the most recently created patient histories."""
+
+    histories: List[PatientHistoryRecord] = Field(
+        description="The 10 most recently created patient histories, ordered newest first."
+    )
+
+
 # ---------------------------------------------------------------------------
 # App & OpenAI client setup
 # ---------------------------------------------------------------------------
@@ -138,25 +178,35 @@ SYSTEM_PROMPT = (
 # ---------------------------------------------------------------------------
 
 
-def _persist_history(summary: ClinicalHistorySummary) -> None:
+def _persist_history(summary: ClinicalHistorySummary) -> dict:
     """
-    Store an extracted clinical history in the patient_histories table via
-    the official supabase-py client. Best-effort: a persistence failure is
-    logged but does not prevent the extracted summary from reaching the
-    caller, since the kiosk's primary function is the extraction itself.
+    Insert an extracted clinical history into the patient_histories table via
+    the official supabase-py client, using the parsed ClinicalHistorySummary's
+    exact JSON shape for the JSONB columns, and return the inserted row as
+    Supabase returns it (including its generated id and created_at).
     """
     try:
-        supabase.table(PATIENT_HISTORIES_TABLE).insert(
-            {
-                "chief_complaint": summary.chief_complaint,
-                "hpi_socrates": summary.hpi_socrates,
-                "current_medications": [m.model_dump() for m in summary.current_medications],
-                "ayush_parameters": summary.ayush_parameters.model_dump(),
-                "red_flags_detected": summary.red_flags_detected,
-            }
-        ).execute()
-    except Exception:
+        response = (
+            supabase.table(PATIENT_HISTORIES_TABLE)
+            .insert(
+                {
+                    "chief_complaint": summary.chief_complaint,
+                    "hpi_socrates": summary.hpi_socrates,
+                    "current_medications": [m.model_dump() for m in summary.current_medications],
+                    "ayush_parameters": summary.ayush_parameters.model_dump(),
+                    "red_flags_detected": summary.red_flags_detected,
+                }
+            )
+            .execute()
+        )
+    except Exception as exc:
         logger.exception("Failed to persist clinical history to Supabase.")
+        raise HTTPException(status_code=502, detail=f"Failed to persist clinical history to Supabase: {exc}") from exc
+
+    if not response.data:
+        raise HTTPException(status_code=502, detail="Supabase insert returned no data.")
+
+    return response.data[0]
 
 
 # ---------------------------------------------------------------------------
@@ -169,13 +219,15 @@ async def health() -> dict:
     return {"status": "ok"}
 
 
-@app.post("/extract-history", response_model=ClinicalHistorySummary)
-async def extract_history(request: TranscriptRequest) -> ClinicalHistorySummary:
+@app.post("/extract-history", response_model=PatientHistoryRecord)
+async def extract_history(request: TranscriptRequest) -> PatientHistoryRecord:
     """
     Extract a structured ClinicalHistorySummary from a raw patient transcript
-    using OpenAI's native Structured Outputs. The LLM's JSON output is never
-    hand-parsed: the SDK guarantees the response conforms to the Pydantic
-    schema via client.beta.chat.completions.parse.
+    using OpenAI's native Structured Outputs, insert it as a new row in the
+    patient_histories Supabase table, and return the inserted database
+    record. The LLM's JSON output is never hand-parsed: the SDK guarantees
+    the response conforms to the Pydantic schema via
+    client.beta.chat.completions.parse.
     """
     try:
         completion = client.beta.chat.completions.parse(
@@ -198,9 +250,9 @@ async def extract_history(request: TranscriptRequest) -> ClinicalHistorySummary:
     if parsed is None:
         raise HTTPException(status_code=502, detail="Model did not return a parsed structured output.")
 
-    _persist_history(parsed)
+    record = _persist_history(parsed)
 
-    return parsed
+    return record
 
 
 @app.post("/extract-from-image", response_model=ClinicalHistorySummary)
@@ -262,3 +314,89 @@ async def extract_from_image(file: UploadFile = File(...)) -> ClinicalHistorySum
     _persist_history(parsed)
 
     return parsed
+
+
+@app.post("/upload-document", response_model=DocumentUploadResult)
+async def upload_document(file: UploadFile = File(...)) -> DocumentUploadResult:
+    """
+    Upload a prescription/document image to the medical_documents Supabase
+    Storage bucket, then extract its medications via the OpenAI gpt-4o
+    Vision model using Structured Outputs. Only the image's public Storage
+    URL is sent to OpenAI — never the raw image bytes.
+    """
+    contents = await file.read()
+    if not contents:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    extension = os.path.splitext(file.filename or "")[1] or ".jpg"
+    storage_path = f"{uuid.uuid4()}{extension}"
+
+    # Step 1: upload the raw file bytes to Supabase Storage.
+    try:
+        supabase.storage.from_(MEDICAL_DOCUMENTS_BUCKET).upload(
+            storage_path,
+            contents,
+            {"content-type": file.content_type or "application/octet-stream"},
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Supabase Storage upload failed: {exc}") from exc
+
+    # Step 2: retrieve the public URL for the uploaded image.
+    public_url = supabase.storage.from_(MEDICAL_DOCUMENTS_BUCKET).get_public_url(storage_path)
+
+    # Step 3: pass the public URL to the OpenAI gpt-4o Vision model, forcing
+    # Structured Outputs to conform to ExtractedPrescription.
+    try:
+        completion = client.beta.chat.completions.parse(
+            model="gpt-4o-2024-08-06",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a prescription extraction engine. Extract every medication listed "
+                        "in the provided prescription image, including its name, dosage, and frequency."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Extract all medications from this prescription image."},
+                        {"type": "image_url", "image_url": {"url": public_url}},
+                    ],
+                },
+            ],
+            response_format=ExtractedPrescription,
+        )
+    except OpenAIError as exc:
+        raise HTTPException(status_code=502, detail=f"OpenAI API error: {exc}") from exc
+
+    message = completion.choices[0].message
+
+    if message.refusal:
+        raise HTTPException(status_code=422, detail=f"Model refused to process image: {message.refusal}")
+
+    parsed = message.parsed
+    if parsed is None:
+        raise HTTPException(status_code=502, detail="Model did not return a parsed structured output.")
+
+    return DocumentUploadResult(storage_path=storage_path, extracted_prescription=parsed)
+
+
+@app.get("/api/v1/waiting-room", response_model=WaitingRoomResponse)
+async def get_waiting_room() -> WaitingRoomResponse:
+    """
+    Return the 10 most recently created clinical histories from the
+    patient_histories table, ordered by created_at descending.
+    """
+    try:
+        response = (
+            supabase.table(PATIENT_HISTORIES_TABLE)
+            .select("*")
+            .order("created_at", desc=True)
+            .limit(10)
+            .execute()
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to query patient_histories: {exc}") from exc
+
+    return WaitingRoomResponse(histories=response.data)

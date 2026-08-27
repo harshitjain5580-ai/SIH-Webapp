@@ -4,3 +4,4 @@ pydantic
 openai
 supabase
 python-multipart
+python-dotenv
