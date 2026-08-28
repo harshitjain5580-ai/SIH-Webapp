@@ -11,7 +11,7 @@ The generated split is 81 train / 10 validation / 11 test (80% / 10% / 10% of 10
 ## Hardware
 
 GPU: NVIDIA GeForce RTX 4050 Laptop GPU (6,141 MiB reported by `nvidia-smi`)  
-CUDA: system driver CUDA 13.1; installed PyTorch is `2.13.0+cpu`, so CUDA was unavailable to Python and training ran on CPU.
+CUDA: available through PyTorch `2.11.0+cu128`; BF16 training ran on the GPU.
 
 ## Model
 

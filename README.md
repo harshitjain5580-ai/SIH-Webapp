@@ -6,11 +6,12 @@ Full architecture rules, tech stack, and the clinical data contracts live in [`c
 
 ## Tech Stack
 - **Backend:** Python 3.10+, FastAPI, Pydantic v2
-- **Frontend:** React/Next.js, TypeScript, Tailwind CSS
-- **AI/ML:** OpenAI API (Structured Outputs + Vision)
+- **AI/ML:** Local Qwen2.5-1.5B-Instruct LoRA adapter for bilingual intake; OpenAI-compatible API for document/history extraction
 - **Database & Storage:** Supabase (PostgreSQL & Storage)
 
-## Getting Started (Backend)
+This repository currently provides the backend API; there is no web frontend in this checkout.
+
+## Getting Started
 
 1. **Clone and enter the project**
    ```bash
@@ -19,28 +20,28 @@ Full architecture rules, tech stack, and the clinical data contracts live in [`c
    ```
 
 2. **Create and activate a virtual environment**
-   ```bash
+   ```powershell
    python -m venv venv
-   venv\Scripts\activate      # Windows
-   source venv/bin/activate   # macOS/Linux
+   venv\Scripts\activate
    ```
 
 3. **Install dependencies**
-   ```bash
+   ```powershell
    pip install -r requirements.txt
+   pip install -r training\requirements.txt
    ```
 
 4. **Configure environment variables**
-   ```bash
-   cp .env.example .env
+   ```powershell
+   Copy-Item .env.example .env
    ```
-   Fill in `.env` with real values:
-   - `OPENAI_API_KEY` — from the OpenAI dashboard
+   Fill in `.env` with real values if using document/history extraction:
+   - `OPENAI_API_KEY` — from OpenAI, or set `AI_PROVIDER=xai` and `GROK_API_KEY` for xAI
    - `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` — from the shared Supabase project (ask a teammate for access, or see below). The backend requires the **service_role** key, not the anon key — patient data is locked down to service_role-only access (see `supabase_schema.sql`). Never share this key outside the team or commit it.
 
 5. **Run the API**
-   ```bash
-   uvicorn main:app --reload
+   ```powershell
+   python -m uvicorn main:app --host 127.0.0.1 --port 8000
    ```
    API docs available at `http://127.0.0.1:8000/docs`.
 
@@ -54,16 +55,26 @@ Full architecture rules, tech stack, and the clinical data contracts live in [`c
    from `training/outputs/qwen2.5-1.5b-bilingual-lora/` and does not require an
    API key. The adapter is loaded lazily on its first request.
 
-## For the Frontend Team
+## API usage
 
-The backend exposes two endpoints, both returning the `ClinicalHistorySummary` JSON contract defined in `claude.md.md` §4 and implemented in `main.py`:
+Open Swagger UI at `http://127.0.0.1:8000/docs`.
 
 - `POST /extract-history` — body `{"transcript": "..."}`, extracts structured clinical history from a text transcript.
-- `POST /ask-clinical-question` — body `{"transcript": "..."}`, asks the next question in Hindi, English, or Hinglish without diagnosing or prescribing medicine.
+- `POST /ask-clinical-question` — body `{"transcript": "..."}`, uses the local Qwen adapter to ask one safe follow-up question in English, Hindi, or Romanized Hinglish. It does not prescribe medicine.
 - `POST /extract-from-image` — multipart file upload, extracts structured clinical history from a prescription/document image (uploaded to Supabase Storage first, then read by the OpenAI Vision model).
 - `GET /health` — liveness check.
 
-The full response schema (with field descriptions) is browsable live at `/docs` once the server is running, or read directly off the Pydantic models at the top of `main.py`.
+Example:
+
+```powershell
+Invoke-RestMethod `
+  -Uri http://127.0.0.1:8000/ask-clinical-question `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body '{"transcript":"mere pet mae dard hae"}'
+```
+
+The first local-model request loads Qwen and may take a few seconds. The adapter is trained for question phrasing, not diagnosis, treatment, or clinical decision-making.
 
 ## Database (Supabase)
 
@@ -80,7 +91,10 @@ If the team is sharing a single Supabase project, ask whoever created it for the
 
 ```
 claude.md.md          Architecture rules, tech stack, and JSON data contracts
-main.py                FastAPI app: Pydantic models + /extract-history + /extract-from-image
+main.py                FastAPI app and API routes
+local_bilingual_model.py Lazy loader for the local Qwen bilingual adapter
+bilingual_clinical_conversation_questions.xlsx Training question dataset
+training/               Dataset preparation, training scripts, adapters, and metrics
 supabase_schema.sql     Database schema, storage bucket, and RLS policies
 requirements.txt        Python dependencies
 .env.example            Required environment variables (copy to .env)
