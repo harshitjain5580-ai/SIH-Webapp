@@ -5,6 +5,7 @@ import argparse
 import json
 from pathlib import Path
 
+import pandas as pd
 import torch
 from datasets import Dataset
 from peft import LoraConfig
@@ -16,18 +17,51 @@ from transformers import (
     TrainingArguments,
 )
 
+DEVANAGARI_MAP = {
+    "अ":"a","आ":"aa","इ":"i","ई":"ee","उ":"u","ऊ":"oo","ए":"e","ऐ":"ai","ओ":"o","औ":"au",
+    "क":"k","ख":"kh","ग":"g","घ":"gh","च":"ch","छ":"chh","ज":"j","झ":"jh","ट":"t","ठ":"th",
+    "ड":"d","ढ":"dh","ण":"n","त":"t","थ":"th","द":"d","ध":"dh","न":"n","प":"p","फ":"ph",
+    "ब":"b","भ":"bh","म":"m","य":"y","र":"r","ल":"l","व":"v","श":"sh","ष":"sh","स":"s","ह":"h",
+    "ं":"n","ः":"h","।":".","़":"",
+}
+
+
+def romanize_hindi(text: str) -> str:
+    """Create a readable Romanized-Hindi/Hinglish training variant."""
+    result = []
+    for char in text:
+        result.append(DEVANAGARI_MAP.get(char, char))
+    return "".join(result).replace("aa p", "aap").replace(" hai", " hai")
+
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset", default="training/dataset/train.jsonl")
-    parser.add_argument("--output", default="training/outputs/qwen2.5-1.5b-qlora")
+    parser.add_argument("--dataset", default="bilingual_clinical_conversation_questions.xlsx")
+    parser.add_argument("--output", default="training/outputs/qwen2.5-1.5b-bilingual-lora")
     parser.add_argument("--model", default="Qwen/Qwen2.5-1.5B-Instruct")
     args = parser.parse_args()
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is required for 4-bit QLoRA; install a CUDA-enabled PyTorch build.")
 
-    records = [json.loads(line) for line in Path(args.dataset).read_text(encoding="utf-8").splitlines() if line]
-    dataset = Dataset.from_dict({"text": [f"Prescription transcription:\n{r['text']}" for r in records]})
+    frame = pd.read_excel(args.dataset, sheet_name="Training_Data").dropna(
+        subset=["English question", "Hindi question (Devanagari)"]
+    )
+    records = frame.to_dict("records")
+    examples = []
+    for record in records:
+        safety = str(record.get("safety note", ""))
+        examples.extend([
+            f"System: You are a safe clinical intake interviewer. Ask one question only. Never diagnose or prescribe medicine.\n"
+            f"User: Continue the interview in English. Category: {record['category']}. Ask the next question.\n"
+            f"Assistant: {record['English question']}\nSafety: {safety}",
+            f"System: आप सुरक्षित स्वास्थ्य-साक्षात्कार सहायक हैं। एक बार में केवल एक प्रश्न पूछें। निदान या दवा न लिखें।\n"
+            f"User: हिंदी में बातचीत जारी रखें। श्रेणी: {record['category']}. अगला प्रश्न पूछें।\n"
+            f"Assistant: {record['Hindi question (Devanagari)']}\nSafety: {safety}",
+            f"System: You are a safe clinical intake interviewer. Ask one question only. Never diagnose or prescribe medicine.\n"
+            f"User: Continue the interview in Hinglish (Roman Hindi). Category: {record['category']}. Ask the next question.\n"
+            f"Assistant: {romanize_hindi(record['Hindi question (Devanagari)'])}\nSafety: {safety}",
+        ])
+    dataset = Dataset.from_dict({"text": examples})
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     tokenizer.pad_token = tokenizer.eos_token
     dataset = dataset.map(
@@ -71,9 +105,10 @@ def main() -> None:
     tokenizer.save_pretrained(str(output))
     (output / "training_summary.json").write_text(
         json.dumps({
-            "base_model": args.model, "method": "LoRA fallback",
+            "base_model": args.model, "method": "LoRA",
             "quantization": "none (bitsandbytes 4-bit loader crashes on this Windows runtime)",
-            "examples": len(records), "epochs": 3, "batch_size": 1,
+            "examples": len(examples), "source_question_pairs": len(records), "languages": ["English", "Hindi", "Hinglish"],
+            "epochs": 3, "batch_size": 1,
             "gradient_accumulation_steps": 8, "learning_rate": 5e-5,
             "gpu": torch.cuda.get_device_name(0),
             "vram_gib": torch.cuda.get_device_properties(0).total_memory / 1024**3,

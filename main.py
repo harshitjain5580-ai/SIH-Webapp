@@ -18,6 +18,7 @@ claude.md.md:
   OpenAI Vision model.
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -432,24 +433,21 @@ async def ask_clinical_question(request: TranscriptRequest) -> ConversationalQue
         raise HTTPException(status_code=400, detail="Transcript must not be empty.")
 
     try:
-        completion = client.beta.chat.completions.parse(
-            model=AI_MODEL,
-            messages=[
-                {"role": "system", "content": CONVERSATION_SYSTEM_PROMPT},
-                {"role": "user", "content": request.transcript},
-            ],
-            response_format=ConversationalQuestionResponse,
-        )
-    except OpenAIError as exc:
-        raise HTTPException(status_code=502, detail=f"OpenAI API error: {exc}") from exc
+        from local_bilingual_model import ask
 
-    message = completion.choices[0].message
-    if message.refusal:
-        raise HTTPException(status_code=422, detail=f"Model refused to process message: {message.refusal}")
-    parsed = message.parsed
-    if parsed is None:
-        raise HTTPException(status_code=502, detail="Model did not return a parsed conversational response.")
-    return parsed
+        reply = await asyncio.to_thread(ask, request.transcript)
+    except (FileNotFoundError, RuntimeError, OSError) as exc:
+        logger.exception("Local bilingual model inference failed.")
+        raise HTTPException(status_code=503, detail=f"Local bilingual model unavailable: {exc}") from exc
+    lower = request.transcript.lower()
+    hindi = any("\u0900" <= char <= "\u097f" for char in request.transcript)
+    hinglish = any(word in lower for word in ("mere", "pet", "dard", "hai", "hue", "kaise"))
+    urgent = any(word in lower for word in ("chest pain", "breathing", "faint", "stroke", "बेहोश", "सीने"))
+    return ConversationalQuestionResponse(
+        reply=reply,
+        language="Hinglish" if hinglish else ("Hindi" if hindi else "English"),
+        red_flags_detected=urgent,
+    )
 
 
 @app.post("/extract-history", response_model=PatientHistoryRecord)
