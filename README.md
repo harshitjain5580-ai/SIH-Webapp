@@ -49,6 +49,7 @@ Full architecture rules, tech stack, and the clinical data contracts live in [`c
 The backend exposes two endpoints, both returning the `ClinicalHistorySummary` JSON contract defined in `claude.md.md` §4 and implemented in `main.py`:
 
 - `POST /extract-history` — body `{"transcript": "..."}`, extracts structured clinical history from a text transcript.
+- `POST /ask-clinical-question` — body `{"transcript": "..."}`, asks the next question in Hindi, English, or Hinglish without diagnosing or prescribing medicine.
 - `POST /extract-from-image` — multipart file upload, extracts structured clinical history from a prescription/document image (uploaded to Supabase Storage first, then read by the OpenAI Vision model).
 - `GET /health` — liveness check.
 

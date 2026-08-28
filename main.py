@@ -108,6 +108,16 @@ class TranscriptRequest(BaseModel):
     transcript: str = Field(description="Raw patient conversation transcript to extract structured history from.")
 
 
+class ConversationalQuestionResponse(BaseModel):
+    """A single bilingual, non-prescriptive clinical intake response."""
+
+    reply: str = Field(description="The next question for the patient, in the patient's language.")
+    language: str = Field(description="Detected language, such as Hindi, English, or Hinglish.")
+    red_flags_detected: bool = Field(
+        description="True when the patient's message suggests an urgent emergency symptom."
+    )
+
+
 class PatientHistoryRecord(BaseModel):
     """A row from the patient_histories Supabase table, as returned after insert."""
 
@@ -345,6 +355,20 @@ GENERATE_SUMMARY_SYSTEM_PROMPT = (
     "Set red_flags_detected to true if anything provided indicates acute cardiac events "
     "or neurological deficits. Otherwise set it to false."
 )
+CONVERSATION_SYSTEM_PROMPT = (
+    "You are MediKiosk's clinical intake interviewer. Your only job is to ask the patient "
+    "the next useful question; do not diagnose, recommend treatment, or prescribe medicine. "
+    "Detect whether the patient uses Hindi, English, or Hinglish and reply in that same style. "
+    "Use simple, respectful language and ask one focused question at a time. For pain, ask "
+    "follow-up questions covering location, onset, character, severity, duration, radiation, "
+    "and what makes it better or worse, adapting to answers already provided. Ask relevant "
+    "questions about associated symptoms, medical history, and current medicines only when "
+    "needed. If emergency warning signs are reported (severe chest pain, trouble breathing, "
+    "fainting, sudden weakness, facial drooping, or confusion), set red_flags_detected true "
+    "and tell the patient to seek emergency care immediately; do not provide a prescription. "
+    "The reply must always be a question, except for that emergency instruction followed by "
+    "a question."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -391,6 +415,33 @@ def _persist_history(summary: ClinicalHistorySummary) -> dict:
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
+
+
+@app.post("/ask-clinical-question", response_model=ConversationalQuestionResponse)
+async def ask_clinical_question(request: TranscriptRequest) -> ConversationalQuestionResponse:
+    """Ask the next bilingual intake question without diagnosing or prescribing."""
+    if not request.transcript.strip():
+        raise HTTPException(status_code=400, detail="Transcript must not be empty.")
+
+    try:
+        completion = client.beta.chat.completions.parse(
+            model="gpt-4o-2024-08-06",
+            messages=[
+                {"role": "system", "content": CONVERSATION_SYSTEM_PROMPT},
+                {"role": "user", "content": request.transcript},
+            ],
+            response_format=ConversationalQuestionResponse,
+        )
+    except OpenAIError as exc:
+        raise HTTPException(status_code=502, detail=f"OpenAI API error: {exc}") from exc
+
+    message = completion.choices[0].message
+    if message.refusal:
+        raise HTTPException(status_code=422, detail=f"Model refused to process message: {message.refusal}")
+    parsed = message.parsed
+    if parsed is None:
+        raise HTTPException(status_code=502, detail="Model did not return a parsed conversational response.")
+    return parsed
 
 
 @app.post("/extract-history", response_model=PatientHistoryRecord)
