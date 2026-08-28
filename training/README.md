@@ -53,3 +53,10 @@ native Windows bitsandbytes access violation before training, so the successful
 run used a BF16 LoRA adapter instead. It completed 3 epochs on the RTX 4050;
 this is a transcription-domain adapter and does not teach bilingual clinical
 question behavior. Adapter files are in `outputs/qwen2.5-1.5b-qlora/`.
+
+`train_qwen_qlora.py` also trains a separate bilingual clinical-question adapter
+from `bilingual_clinical_conversation_questions.xlsx`. It uses 83 English/Hindi
+question pairs (166 supervised examples), 3 epochs, and saves to
+`outputs/qwen2.5-1.5b-bilingual-lora/`. The workbook contains questions only,
+so this teaches safe bilingual question phrasing rather than full adaptive
+dialogue policy.

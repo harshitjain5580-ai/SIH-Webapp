@@ -7,3 +7,5 @@ datasets>=3.0
 accelerate>=1.0
 peft>=0.15
 bitsandbytes>=0.45
+pandas>=2.0
+openpyxl>=3.1
