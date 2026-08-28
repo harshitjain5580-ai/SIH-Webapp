@@ -108,6 +108,16 @@ class TranscriptRequest(BaseModel):
     transcript: str = Field(description="Raw patient conversation transcript to extract structured history from.")
 
 
+class ConversationalQuestionResponse(BaseModel):
+    """A single bilingual, non-prescriptive clinical intake response."""
+
+    reply: str = Field(description="The next question for the patient, in the patient's language.")
+    language: str = Field(description="Detected language, such as Hindi, English, or Hinglish.")
+    red_flags_detected: bool = Field(
+        description="True when the patient's message suggests an urgent emergency symptom."
+    )
+
+
 class PatientHistoryRecord(BaseModel):
     """A row from the patient_histories Supabase table, as returned after insert."""
 
@@ -258,11 +268,19 @@ class HisPushResult(BaseModel):
 
 app = FastAPI(title="MediKiosk API", version="0.1.0")
 
-# The OpenAI SDK requires a non-empty api_key at construction time. Fall back to
-# a placeholder so the app can still start (and /health respond) even before
-# OPENAI_API_KEY is configured; real calls will fail with a clear 502 until a
-# valid key is set in the environment.
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY") or "not-set")
+# OpenAI-compatible providers can be selected without changing endpoint code.
+# Set AI_PROVIDER=xai and GROK_API_KEY to use xAI's Grok models.
+AI_PROVIDER = os.environ.get("AI_PROVIDER", "openai").lower()
+if AI_PROVIDER == "xai":
+    AI_API_KEY = os.environ.get("GROK_API_KEY") or "not-set"
+    AI_BASE_URL = "https://api.x.ai/v1"
+    AI_MODEL = os.environ.get("AI_MODEL", "grok-4.6")
+else:
+    AI_API_KEY = os.environ.get("OPENAI_API_KEY") or "not-set"
+    AI_BASE_URL = os.environ.get("AI_BASE_URL") or None
+    AI_MODEL = os.environ.get("AI_MODEL", "gpt-4o-2024-08-06")
+
+client = OpenAI(api_key=AI_API_KEY, base_url=AI_BASE_URL)
 
 # Same fallback pattern for Supabase: allow the app to start before
 # SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are configured; real DB/Storage
@@ -345,6 +363,20 @@ GENERATE_SUMMARY_SYSTEM_PROMPT = (
     "Set red_flags_detected to true if anything provided indicates acute cardiac events "
     "or neurological deficits. Otherwise set it to false."
 )
+CONVERSATION_SYSTEM_PROMPT = (
+    "You are MediKiosk's clinical intake interviewer. Your only job is to ask the patient "
+    "the next useful question; do not diagnose, recommend treatment, or prescribe medicine. "
+    "Detect whether the patient uses Hindi, English, or Hinglish and reply in that same style. "
+    "Use simple, respectful language and ask one focused question at a time. For pain, ask "
+    "follow-up questions covering location, onset, character, severity, duration, radiation, "
+    "and what makes it better or worse, adapting to answers already provided. Ask relevant "
+    "questions about associated symptoms, medical history, and current medicines only when "
+    "needed. If emergency warning signs are reported (severe chest pain, trouble breathing, "
+    "fainting, sudden weakness, facial drooping, or confusion), set red_flags_detected true "
+    "and tell the patient to seek emergency care immediately; do not provide a prescription. "
+    "The reply must always be a question, except for that emergency instruction followed by "
+    "a question."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -393,6 +425,33 @@ async def health() -> dict:
     return {"status": "ok"}
 
 
+@app.post("/ask-clinical-question", response_model=ConversationalQuestionResponse)
+async def ask_clinical_question(request: TranscriptRequest) -> ConversationalQuestionResponse:
+    """Ask the next bilingual intake question without diagnosing or prescribing."""
+    if not request.transcript.strip():
+        raise HTTPException(status_code=400, detail="Transcript must not be empty.")
+
+    try:
+        completion = client.beta.chat.completions.parse(
+            model=AI_MODEL,
+            messages=[
+                {"role": "system", "content": CONVERSATION_SYSTEM_PROMPT},
+                {"role": "user", "content": request.transcript},
+            ],
+            response_format=ConversationalQuestionResponse,
+        )
+    except OpenAIError as exc:
+        raise HTTPException(status_code=502, detail=f"OpenAI API error: {exc}") from exc
+
+    message = completion.choices[0].message
+    if message.refusal:
+        raise HTTPException(status_code=422, detail=f"Model refused to process message: {message.refusal}")
+    parsed = message.parsed
+    if parsed is None:
+        raise HTTPException(status_code=502, detail="Model did not return a parsed conversational response.")
+    return parsed
+
+
 @app.post("/extract-history", response_model=PatientHistoryRecord)
 async def extract_history(request: TranscriptRequest) -> PatientHistoryRecord:
     """
@@ -405,7 +464,7 @@ async def extract_history(request: TranscriptRequest) -> PatientHistoryRecord:
     """
     try:
         completion = client.beta.chat.completions.parse(
-            model="gpt-4o-2024-08-06",
+            model=AI_MODEL,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": request.transcript},
@@ -457,7 +516,7 @@ async def extract_from_image(file: UploadFile = File(...)) -> ClinicalHistorySum
 
     try:
         completion = client.beta.chat.completions.parse(
-            model="gpt-4o-2024-08-06",
+            model=AI_MODEL,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {
@@ -523,7 +582,7 @@ async def upload_document(file: UploadFile = File(...)) -> DocumentUploadResult:
     # Structured Outputs to conform to ExtractedDocument.
     try:
         completion = client.beta.chat.completions.parse(
-            model="gpt-4o-2024-08-06",
+            model=AI_MODEL,
             messages=[
                 {
                     "role": "system",
@@ -600,7 +659,7 @@ async def converse(request: ConverseRequest) -> ConversationStep:
 
     try:
         completion = client.beta.chat.completions.parse(
-            model="gpt-4o-2024-08-06",
+            model=AI_MODEL,
             messages=messages,
             response_format=ConversationStep,
         )
@@ -640,7 +699,7 @@ async def generate_summary(request: GenerateSummaryRequest) -> PatientHistoryRec
 
     try:
         completion = client.beta.chat.completions.parse(
-            model="gpt-4o-2024-08-06",
+            model=AI_MODEL,
             messages=[
                 {"role": "system", "content": GENERATE_SUMMARY_SYSTEM_PROMPT},
                 {"role": "user", "content": "\n\n".join(user_content_parts)},

@@ -1,0 +1,8 @@
+dataset_root: "C:/Users/LENOVO/.cache/kagglehub/datasets/codinganirbanb/doctor-prescription-labelled-dataset/versions/1/prepared_image_data"
+work_dir: "training"
+seed: 42
+image_size: [64, 64]
+train_fraction: 0.8
+validation_fraction: 0.1
+test_fraction: 0.1
+neighbors: 1

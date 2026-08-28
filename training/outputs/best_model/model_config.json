@@ -1,0 +1,10 @@
+{
+  "model": "Gradient-augmented grayscale image nearest-neighbor transcription",
+  "training_examples": 81,
+  "parameters": 12288,
+  "framework": "scikit-learn",
+  "precision": "float32",
+  "quantization": "none",
+  "cuda": false,
+  "note": "CPU model; detected GPU is unavailable to installed PyTorch runtime"
+}
