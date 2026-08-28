@@ -44,6 +44,11 @@ Full architecture rules, tech stack, and the clinical data contracts live in [`c
    ```
    API docs available at `http://127.0.0.1:8000/docs`.
 
+   The AI provider defaults to OpenAI. To use Grok, set `AI_PROVIDER=xai`,
+   `GROK_API_KEY`, and optionally `AI_MODEL` (for example,
+   `grok-4-1-fast-reasoning`) in `.env`. Both providers use the same
+   OpenAI-compatible client; no API key is committed to the repository.
+
 ## For the Frontend Team
 
 The backend exposes two endpoints, both returning the `ClinicalHistorySummary` JSON contract defined in `claude.md.md` §4 and implemented in `main.py`:

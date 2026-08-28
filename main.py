@@ -268,11 +268,19 @@ class HisPushResult(BaseModel):
 
 app = FastAPI(title="MediKiosk API", version="0.1.0")
 
-# The OpenAI SDK requires a non-empty api_key at construction time. Fall back to
-# a placeholder so the app can still start (and /health respond) even before
-# OPENAI_API_KEY is configured; real calls will fail with a clear 502 until a
-# valid key is set in the environment.
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY") or "not-set")
+# OpenAI-compatible providers can be selected without changing endpoint code.
+# Set AI_PROVIDER=xai and GROK_API_KEY to use xAI's Grok models.
+AI_PROVIDER = os.environ.get("AI_PROVIDER", "openai").lower()
+if AI_PROVIDER == "xai":
+    AI_API_KEY = os.environ.get("GROK_API_KEY") or "not-set"
+    AI_BASE_URL = "https://api.x.ai/v1"
+    AI_MODEL = os.environ.get("AI_MODEL", "grok-4-1-fast-reasoning")
+else:
+    AI_API_KEY = os.environ.get("OPENAI_API_KEY") or "not-set"
+    AI_BASE_URL = os.environ.get("AI_BASE_URL") or None
+    AI_MODEL = os.environ.get("AI_MODEL", "gpt-4o-2024-08-06")
+
+client = OpenAI(api_key=AI_API_KEY, base_url=AI_BASE_URL)
 
 # Same fallback pattern for Supabase: allow the app to start before
 # SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are configured; real DB/Storage
@@ -425,7 +433,7 @@ async def ask_clinical_question(request: TranscriptRequest) -> ConversationalQue
 
     try:
         completion = client.beta.chat.completions.parse(
-            model="gpt-4o-2024-08-06",
+            model=AI_MODEL,
             messages=[
                 {"role": "system", "content": CONVERSATION_SYSTEM_PROMPT},
                 {"role": "user", "content": request.transcript},
@@ -456,7 +464,7 @@ async def extract_history(request: TranscriptRequest) -> PatientHistoryRecord:
     """
     try:
         completion = client.beta.chat.completions.parse(
-            model="gpt-4o-2024-08-06",
+            model=AI_MODEL,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": request.transcript},
@@ -508,7 +516,7 @@ async def extract_from_image(file: UploadFile = File(...)) -> ClinicalHistorySum
 
     try:
         completion = client.beta.chat.completions.parse(
-            model="gpt-4o-2024-08-06",
+            model=AI_MODEL,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {
@@ -574,7 +582,7 @@ async def upload_document(file: UploadFile = File(...)) -> DocumentUploadResult:
     # Structured Outputs to conform to ExtractedDocument.
     try:
         completion = client.beta.chat.completions.parse(
-            model="gpt-4o-2024-08-06",
+            model=AI_MODEL,
             messages=[
                 {
                     "role": "system",
@@ -651,7 +659,7 @@ async def converse(request: ConverseRequest) -> ConversationStep:
 
     try:
         completion = client.beta.chat.completions.parse(
-            model="gpt-4o-2024-08-06",
+            model=AI_MODEL,
             messages=messages,
             response_format=ConversationStep,
         )
@@ -691,7 +699,7 @@ async def generate_summary(request: GenerateSummaryRequest) -> PatientHistoryRec
 
     try:
         completion = client.beta.chat.completions.parse(
-            model="gpt-4o-2024-08-06",
+            model=AI_MODEL,
             messages=[
                 {"role": "system", "content": GENERATE_SUMMARY_SYSTEM_PROMPT},
                 {"role": "user", "content": "\n\n".join(user_content_parts)},
@@ -842,3 +850,4 @@ async def push_to_his(request: HisPushRequest) -> HisPushResult:
         his_record_id=str(uuid.uuid4()),
         status="submitted",
     )
+
