@@ -17,6 +17,22 @@ from transformers import (
     TrainingArguments,
 )
 
+DEVANAGARI_MAP = {
+    "अ":"a","आ":"aa","इ":"i","ई":"ee","उ":"u","ऊ":"oo","ए":"e","ऐ":"ai","ओ":"o","औ":"au",
+    "क":"k","ख":"kh","ग":"g","घ":"gh","च":"ch","छ":"chh","ज":"j","झ":"jh","ट":"t","ठ":"th",
+    "ड":"d","ढ":"dh","ण":"n","त":"t","थ":"th","द":"d","ध":"dh","न":"n","प":"p","फ":"ph",
+    "ब":"b","भ":"bh","म":"m","य":"y","र":"r","ल":"l","व":"v","श":"sh","ष":"sh","स":"s","ह":"h",
+    "ं":"n","ः":"h","।":".","़":"",
+}
+
+
+def romanize_hindi(text: str) -> str:
+    """Create a readable Romanized-Hindi/Hinglish training variant."""
+    result = []
+    for char in text:
+        result.append(DEVANAGARI_MAP.get(char, char))
+    return "".join(result).replace("aa p", "aap").replace(" hai", " hai")
+
 
 def main() -> None:
     parser = argparse.ArgumentParser()
@@ -41,6 +57,9 @@ def main() -> None:
             f"System: आप सुरक्षित स्वास्थ्य-साक्षात्कार सहायक हैं। एक बार में केवल एक प्रश्न पूछें। निदान या दवा न लिखें।\n"
             f"User: हिंदी में बातचीत जारी रखें। श्रेणी: {record['category']}. अगला प्रश्न पूछें।\n"
             f"Assistant: {record['Hindi question (Devanagari)']}\nSafety: {safety}",
+            f"System: You are a safe clinical intake interviewer. Ask one question only. Never diagnose or prescribe medicine.\n"
+            f"User: Continue the interview in Hinglish (Roman Hindi). Category: {record['category']}. Ask the next question.\n"
+            f"Assistant: {romanize_hindi(record['Hindi question (Devanagari)'])}\nSafety: {safety}",
         ])
     dataset = Dataset.from_dict({"text": examples})
     tokenizer = AutoTokenizer.from_pretrained(args.model)
@@ -88,7 +107,8 @@ def main() -> None:
         json.dumps({
             "base_model": args.model, "method": "LoRA",
             "quantization": "none (bitsandbytes 4-bit loader crashes on this Windows runtime)",
-            "examples": len(examples), "source_question_pairs": len(records), "epochs": 3, "batch_size": 1,
+            "examples": len(examples), "source_question_pairs": len(records), "languages": ["English", "Hindi", "Hinglish"],
+            "epochs": 3, "batch_size": 1,
             "gradient_accumulation_steps": 8, "learning_rate": 5e-5,
             "gpu": torch.cuda.get_device_name(0),
             "vram_gib": torch.cuda.get_device_properties(0).total_memory / 1024**3,
