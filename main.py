@@ -274,7 +274,7 @@ AI_PROVIDER = os.environ.get("AI_PROVIDER", "openai").lower()
 if AI_PROVIDER == "xai":
     AI_API_KEY = os.environ.get("GROK_API_KEY") or "not-set"
     AI_BASE_URL = "https://api.x.ai/v1"
-    AI_MODEL = os.environ.get("AI_MODEL", "grok-4-1-fast-reasoning")
+    AI_MODEL = os.environ.get("AI_MODEL", "grok-4.6")
 else:
     AI_API_KEY = os.environ.get("OPENAI_API_KEY") or "not-set"
     AI_BASE_URL = os.environ.get("AI_BASE_URL") or None
@@ -850,4 +850,3 @@ async def push_to_his(request: HisPushRequest) -> HisPushResult:
         his_record_id=str(uuid.uuid4()),
         status="submitted",
     )
-

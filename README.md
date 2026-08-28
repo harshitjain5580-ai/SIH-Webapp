@@ -46,7 +46,7 @@ Full architecture rules, tech stack, and the clinical data contracts live in [`c
 
    The AI provider defaults to OpenAI. To use Grok, set `AI_PROVIDER=xai`,
    `GROK_API_KEY`, and optionally `AI_MODEL` (for example,
-   `grok-4-1-fast-reasoning`) in `.env`. Both providers use the same
+   `grok-4.6`) in `.env`. Both providers use the same
    OpenAI-compatible client; no API key is committed to the repository.
 
 ## For the Frontend Team
