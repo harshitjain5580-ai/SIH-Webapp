@@ -36,7 +36,7 @@ Full architecture rules, tech stack, and the clinical data contracts live in [`c
    ```
    Fill in `.env` with real values:
    - `OPENAI_API_KEY` — from the OpenAI dashboard
-   - `SUPABASE_URL` / `SUPABASE_KEY` — from the shared Supabase project (ask a teammate for access, or see below)
+   - `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` — from the shared Supabase project (ask a teammate for access, or see below). The backend requires the **service_role** key, not the anon key — patient data is locked down to service_role-only access (see `supabase_schema.sql`). Never share this key outside the team or commit it.
 
 5. **Run the API**
    ```bash
@@ -59,11 +59,11 @@ The full response schema (with field descriptions) is browsable live at `/docs` 
 The database schema is defined in [`supabase_schema.sql`](supabase_schema.sql):
 - `patient_histories` table — stores every extracted clinical history.
 - `medical_documents` Storage bucket — stores uploaded prescription/document images.
-- RLS policies currently allow public insert/select for hackathon testing (see the warning at the top of the SQL file — **not safe for production**).
+- RLS is enabled on both with no anon/authenticated policies — only the backend's `service_role` key can read or write. The frontend must go through the FastAPI backend, never call Supabase directly.
 
-To stand up a Supabase project from scratch: create a project at [supabase.com](https://supabase.com), open the SQL Editor, and run the contents of `supabase_schema.sql`. Then put that project's URL and anon key into your `.env`.
+To stand up a Supabase project from scratch: create a project at [supabase.com](https://supabase.com), open the SQL Editor, and run the contents of `supabase_schema.sql`. Then put that project's URL and **service_role** key (Dashboard -> Settings -> API) into your `.env` as `SUPABASE_SERVICE_ROLE_KEY`.
 
-If the team is sharing a single Supabase project, ask whoever created it for the `SUPABASE_URL` and `SUPABASE_KEY` instead of creating your own.
+If the team is sharing a single Supabase project, ask whoever created it for the `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` instead of creating your own — this key is sensitive, so share it privately (not in Slack/GitHub), not by committing it anywhere.
 
 ## Project Structure
 

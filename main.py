@@ -18,10 +18,11 @@ claude.md.md:
   OpenAI Vision model.
 """
 
+import json
 import logging
 import os
 import uuid
-from typing import List
+from typing import List, Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -47,7 +48,10 @@ class Medication(BaseModel):
 
 
 class AyushParameters(BaseModel):
-    """AYUSH Dashavidha Pariksha parameters captured from the conversation."""
+    """
+    Full AYUSH Dashavidha Pariksha ('tenfold examination') parameters, captured
+    from the conversation where the transcript provides relevant information.
+    """
 
     prakriti: str = Field(
         description="Patient's baseline constitutional type (Vata/Pitta/Kapha balance) as assessed from the conversation."
@@ -55,6 +59,14 @@ class AyushParameters(BaseModel):
     vikriti: str = Field(
         description="Patient's current state of doshic imbalance as assessed from the conversation."
     )
+    sara: str = Field(description="Tissue (dhatu) quality and excellence assessed from the conversation.")
+    samhanana: str = Field(description="Body compactness/build (physical compactness of the frame) assessed from the conversation.")
+    pramana: str = Field(description="Body measurements and proportion assessed from the conversation.")
+    satmya: str = Field(description="Patient's suitability/adaptability to different foods, climates, and conditions.")
+    sattva: str = Field(description="Patient's psychic strength and mental resilience assessed from the conversation.")
+    ahara_shakti: str = Field(description="Patient's digestive/appetite capacity (power of food intake and digestion).")
+    vyayama_shakti: str = Field(description="Patient's exercise capacity and physical stamina.")
+    vaya: str = Field(description="Patient's age-related constitutional stage (e.g. growth, adult, or decline phase).")
 
 
 class ClinicalHistorySummary(BaseModel):
@@ -104,24 +116,41 @@ class PatientHistoryRecord(BaseModel):
     chief_complaint: str = Field(description="The patient's primary reason for the visit.")
     hpi_socrates: str = Field(description="Detailed narrative of the History of Present Illness (SOCRATES).")
     current_medications: List[Medication] = Field(description="Medications the patient is currently taking.")
-    ayush_parameters: AyushParameters = Field(description="AYUSH Dashavidha Pariksha parameters (Prakriti, Vikriti).")
+    ayush_parameters: AyushParameters = Field(description="AYUSH Dashavidha Pariksha parameters.")
     red_flags_detected: bool = Field(description="True if emergency red flags were detected.")
+    alert_acknowledged: bool = Field(
+        default=False, description="True once triage staff have acknowledged a red-flag alert for this history."
+    )
 
 
-class ExtractedPrescription(BaseModel):
-    """Structured prescription data extracted from a document image via the OpenAI Vision model."""
+class InvestigationResult(BaseModel):
+    """A single lab or imaging investigation result extracted from a medical document."""
 
-    medications: List[Medication] = Field(description="List of medications identified in the prescription image.")
+    test_name: str = Field(description="Name of the lab test or investigation, e.g. 'Hemoglobin' or 'Chest X-Ray'.")
+    value: str = Field(description="The measured value or finding, e.g. '10.2 g/dL'.")
+    reference_range: str = Field(description="The normal reference range for this test, e.g. '13.0-17.0 g/dL'. Empty if not applicable/available.")
+    is_abnormal: bool = Field(description="True if the value falls outside the normal reference range.")
+
+
+class ExtractedDocument(BaseModel):
+    """Structured clinical data extracted from a medical document image via the OpenAI Vision model."""
+
+    diagnoses: List[str] = Field(description="Diagnoses mentioned in the document.")
+    medications: List[Medication] = Field(description="Medications prescribed in the document.")
+    investigations: List[InvestigationResult] = Field(
+        description="Lab or imaging investigation results found in the document."
+    )
+    procedures: List[str] = Field(description="Procedures or surgeries mentioned in the document.")
 
 
 class DocumentUploadResult(BaseModel):
-    """Response for /upload-document: the Supabase Storage path plus the extracted prescription data."""
+    """Response for /upload-document: the Supabase Storage path plus the extracted document data."""
 
     storage_path: str = Field(
         description="Path of the uploaded file within the medical_documents Supabase Storage bucket."
     )
-    extracted_prescription: ExtractedPrescription = Field(
-        description="Structured prescription data extracted by the OpenAI Vision model."
+    extracted_document: ExtractedDocument = Field(
+        description="Structured clinical data extracted by the OpenAI Vision model."
     )
 
 
@@ -131,6 +160,96 @@ class WaitingRoomResponse(BaseModel):
     histories: List[PatientHistoryRecord] = Field(
         description="The 10 most recently created patient histories, ordered newest first."
     )
+
+
+class ConversationTurn(BaseModel):
+    """One turn in a patient interview conversation."""
+
+    role: str = Field(description="Either 'assistant' (the kiosk's question) or 'patient' (the patient's answer).")
+    content: str = Field(description="The text of this conversation turn.")
+
+
+class ConverseRequest(BaseModel):
+    """Request body for POST /converse. Stateless: the caller resends the full history each turn."""
+
+    history: List[ConversationTurn] = Field(
+        default_factory=list, description="The conversation so far, oldest first. Empty on the first call."
+    )
+
+
+class ConversationStep(BaseModel):
+    """The kiosk's next move in an adaptive patient interview."""
+
+    next_question: str = Field(description="The next question to ask the patient. Empty string once is_complete is true.")
+    quick_reply_options: List[str] = Field(
+        description="0-4 short tap-friendly answer options for next_question, for touch-based input. Empty if open-ended."
+    )
+    is_complete: bool = Field(
+        description="True once enough history has been gathered to generate a full clinical summary."
+    )
+    is_red_flag_urgent: bool = Field(
+        description="True if the patient's most recent answer indicates an emergency requiring immediate triage."
+    )
+
+
+class DocumentExtractionInput(BaseModel):
+    """A previously-extracted document (from /upload-document) to merge into a unified summary."""
+
+    storage_path: str = Field(description="Supabase Storage path of the source document, for reference/traceability.")
+    extracted_document: ExtractedDocument = Field(description="Previously extracted structured data from this document.")
+
+
+class GenerateSummaryRequest(BaseModel):
+    """Request body for POST /generate-summary."""
+
+    transcript: Optional[str] = Field(
+        default=None, description="Conversational history transcript, if a voice/touch interview was conducted."
+    )
+    documents: List[DocumentExtractionInput] = Field(
+        default_factory=list, description="Previously extracted documents to merge into the unified summary."
+    )
+
+
+class PatientHistoryUpdate(BaseModel):
+    """Request body for PATCH /patient-histories/{id}. Only supplied fields are updated."""
+
+    chief_complaint: Optional[str] = Field(default=None, description="Updated chief complaint.")
+    hpi_socrates: Optional[str] = Field(default=None, description="Updated HPI narrative.")
+    current_medications: Optional[List[Medication]] = Field(default=None, description="Updated medications list.")
+    ayush_parameters: Optional[AyushParameters] = Field(default=None, description="Updated AYUSH parameters.")
+    red_flags_detected: Optional[bool] = Field(default=None, description="Updated red-flag status.")
+
+
+class AbhaVerificationRequest(BaseModel):
+    """Request body for the mock POST /abdm/verify-abha endpoint."""
+
+    abha_id: str = Field(description="The patient's ABHA (Ayushman Bharat Health Account) ID or address.")
+
+
+class AbhaVerificationResult(BaseModel):
+    """Mock response for POST /abdm/verify-abha, standing in for a real ABDM Gateway call."""
+
+    abha_id: str = Field(description="The ABHA ID that was verified.")
+    verified: bool = Field(description="Whether the ABHA ID was successfully verified.")
+    patient_name: str = Field(description="Mock patient name returned by the ABDM Gateway.")
+    date_of_birth: str = Field(description="Mock patient date of birth (YYYY-MM-DD) returned by the ABDM Gateway.")
+    gender: str = Field(description="Mock patient gender returned by the ABDM Gateway.")
+
+
+class HisPushRequest(BaseModel):
+    """Request body for the mock POST /abdm/push-to-his endpoint."""
+
+    history_id: str = Field(description="UUID of the patient_histories row to push to the Hospital Information System.")
+    abha_id: str = Field(description="The patient's ABHA ID to link this record to in the HIS/ABDM Personal Health Record.")
+
+
+class HisPushResult(BaseModel):
+    """Mock response for POST /abdm/push-to-his, standing in for a real FHIR-based HIS/ABDM push."""
+
+    history_id: str = Field(description="UUID of the patient_histories row that was pushed.")
+    abha_id: str = Field(description="The ABHA ID the record was linked to.")
+    his_record_id: str = Field(description="Mock record ID assigned by the Hospital Information System.")
+    status: str = Field(description="Mock push status, e.g. 'submitted'.")
 
 
 # ---------------------------------------------------------------------------
@@ -146,11 +265,18 @@ app = FastAPI(title="MediKiosk API", version="0.1.0")
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY") or "not-set")
 
 # Same fallback pattern for Supabase: allow the app to start before
-# SUPABASE_URL / SUPABASE_KEY are configured; real DB/Storage calls will fail
-# with a clear 502 until valid credentials are set in the environment.
+# SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are configured; real DB/Storage
+# calls will fail with a clear 502 until valid credentials are set in the
+# environment.
+#
+# The backend authenticates with the service_role key (not the anon key) so
+# it bypasses Row Level Security entirely. patient_histories and the
+# medical_documents object policies deny anon/authenticated access outright
+# (see supabase_schema.sql) — this backend is the only client allowed to
+# read or write patient data. Never expose this key to the frontend.
 supabase: Client = create_client(
     os.environ.get("SUPABASE_URL") or "https://not-set.supabase.co",
-    os.environ.get("SUPABASE_KEY") or "not-set",
+    os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or "not-set",
 )
 
 PATIENT_HISTORIES_TABLE = "patient_histories"
@@ -163,13 +289,61 @@ SYSTEM_PROMPT = (
     "When the patient reports pain, apply the SOCRATES framework (Site, Onset, "
     "Character, Radiation, Associated symptoms, Time course, Exacerbating/relieving "
     "factors, Severity) in the hpi_socrates narrative.\n\n"
-    "Capture AYUSH Dashavidha Pariksha parameters (Prakriti, Vikriti) whenever the "
-    "transcript provides information relevant to Ayurvedic constitutional assessment, "
-    "including Agni and Ahara-Vihara cues where mentioned.\n\n"
+    "Capture the full AYUSH Dashavidha Pariksha ('tenfold examination') whenever the "
+    "transcript provides relevant information: Prakriti, Vikriti, Sara, Samhanana, "
+    "Pramana, Satmya, Sattva, Ahara Shakti, Vyayama Shakti, and Vaya. If a parameter "
+    "cannot be assessed from the transcript, state that explicitly rather than "
+    "inventing a value.\n\n"
     "Set red_flags_detected to true if the transcript contains any markers of acute "
     "cardiac events (e.g. chest pain, dyspnoea) or neurological deficits (e.g. stroke "
     "symptoms such as facial droop, slurred speech, sudden weakness). Otherwise set it "
     "to false."
+)
+
+CONVERSE_SYSTEM_PROMPT = (
+    "You are the adaptive conversational history-taking engine for MediKiosk, an AI "
+    "clinical intake kiosk used in Indian hospital OPDs. You conduct a structured "
+    "patient interview one question at a time, mirroring how an experienced physician "
+    "elicits a history.\n\n"
+    "Ask ONE short, plain-language question per turn (suitable for an elderly or "
+    "low-literacy patient). Cover, in a natural adaptive order driven by the patient's "
+    "answers: chief complaint; if pain or a symptom is reported, drill into it using "
+    "SOCRATES (Site, Onset, Character, Radiation, Associated symptoms, Time course, "
+    "Exacerbating/relieving factors, Severity); past medical/surgical history; current "
+    "medications and allergies; family history; personal/lifestyle history; a brief "
+    "review of systems; and, where relevant, AYUSH Dashavidha Pariksha cues (Prakriti, "
+    "Vikriti, Sara, Samhanana, Pramana, Satmya, Sattva, Ahara Shakti, Vyayama Shakti, "
+    "Vaya).\n\n"
+    "For each question, if it has a small set of natural short answers (e.g. yes/no, a "
+    "severity scale, common durations), propose up to 4 quick_reply_options so the "
+    "patient can tap instead of speaking. Leave quick_reply_options empty for genuinely "
+    "open-ended questions.\n\n"
+    "Set is_red_flag_urgent to true the moment any answer indicates an emergency (acute "
+    "cardiac symptoms, stroke symptoms, etc.), independent of whether the interview is "
+    "otherwise complete.\n\n"
+    "Set is_complete to true, and next_question to an empty string, once you have "
+    "gathered enough history to produce a complete clinical summary — do not drag the "
+    "interview out longer than necessary."
+)
+
+GENERATE_SUMMARY_SYSTEM_PROMPT = (
+    "You are a clinical history synthesis engine for MediKiosk. You will be given a "
+    "patient's conversational history transcript (if a voice/touch interview was "
+    "conducted) and/or structured data extracted from their prior medical documents "
+    "(if any were scanned). Synthesize everything provided into a single, unified, "
+    "physician-ready ClinicalHistorySummary — do not produce separate summaries per "
+    "source.\n\n"
+    "Fold document-derived diagnoses and procedures into past_medical_history, "
+    "document-derived medications into current_medications (merging with any "
+    "conversation-derived medications, avoiding duplicates), and mention clinically "
+    "significant abnormal investigation results in the hpi_socrates or "
+    "past_medical_history narrative as appropriate.\n\n"
+    "When the patient reports pain, apply the SOCRATES framework in the hpi_socrates "
+    "narrative. Capture the full AYUSH Dashavidha Pariksha (Prakriti, Vikriti, Sara, "
+    "Samhanana, Pramana, Satmya, Sattva, Ahara Shakti, Vyayama Shakti, Vaya) wherever "
+    "information is available; state explicitly where a parameter cannot be assessed.\n\n"
+    "Set red_flags_detected to true if anything provided indicates acute cardiac events "
+    "or neurological deficits. Otherwise set it to false."
 )
 
 
@@ -319,10 +493,11 @@ async def extract_from_image(file: UploadFile = File(...)) -> ClinicalHistorySum
 @app.post("/upload-document", response_model=DocumentUploadResult)
 async def upload_document(file: UploadFile = File(...)) -> DocumentUploadResult:
     """
-    Upload a prescription/document image to the medical_documents Supabase
-    Storage bucket, then extract its medications via the OpenAI gpt-4o
-    Vision model using Structured Outputs. Only the image's public Storage
-    URL is sent to OpenAI — never the raw image bytes.
+    Upload a medical document image (prescription, lab report, or discharge
+    summary) to the medical_documents Supabase Storage bucket, then extract
+    its diagnoses, medications, investigation results, and procedures via the
+    OpenAI gpt-4o Vision model using Structured Outputs. Only the image's
+    public Storage URL is sent to OpenAI — never the raw image bytes.
     """
     contents = await file.read()
     if not contents:
@@ -345,7 +520,7 @@ async def upload_document(file: UploadFile = File(...)) -> DocumentUploadResult:
     public_url = supabase.storage.from_(MEDICAL_DOCUMENTS_BUCKET).get_public_url(storage_path)
 
     # Step 3: pass the public URL to the OpenAI gpt-4o Vision model, forcing
-    # Structured Outputs to conform to ExtractedPrescription.
+    # Structured Outputs to conform to ExtractedDocument.
     try:
         completion = client.beta.chat.completions.parse(
             model="gpt-4o-2024-08-06",
@@ -353,19 +528,22 @@ async def upload_document(file: UploadFile = File(...)) -> DocumentUploadResult:
                 {
                     "role": "system",
                     "content": (
-                        "You are a prescription extraction engine. Extract every medication listed "
-                        "in the provided prescription image, including its name, dosage, and frequency."
+                        "You are a medical document extraction engine. Extract every diagnosis, "
+                        "medication (with dosage and frequency), lab/imaging investigation result "
+                        "(with its value and reference range, flagging is_abnormal when the value "
+                        "falls outside that range), and procedure or surgery mentioned in the "
+                        "provided medical document image."
                     ),
                 },
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": "Extract all medications from this prescription image."},
+                        {"type": "text", "text": "Extract all structured clinical data from this document image."},
                         {"type": "image_url", "image_url": {"url": public_url}},
                     ],
                 },
             ],
-            response_format=ExtractedPrescription,
+            response_format=ExtractedDocument,
         )
     except OpenAIError as exc:
         raise HTTPException(status_code=502, detail=f"OpenAI API error: {exc}") from exc
@@ -379,7 +557,7 @@ async def upload_document(file: UploadFile = File(...)) -> DocumentUploadResult:
     if parsed is None:
         raise HTTPException(status_code=502, detail="Model did not return a parsed structured output.")
 
-    return DocumentUploadResult(storage_path=storage_path, extracted_prescription=parsed)
+    return DocumentUploadResult(storage_path=storage_path, extracted_document=parsed)
 
 
 @app.get("/api/v1/waiting-room", response_model=WaitingRoomResponse)
@@ -400,3 +578,216 @@ async def get_waiting_room() -> WaitingRoomResponse:
         raise HTTPException(status_code=502, detail=f"Failed to query patient_histories: {exc}") from exc
 
     return WaitingRoomResponse(histories=response.data)
+
+
+@app.post("/converse", response_model=ConversationStep)
+async def converse(request: ConverseRequest) -> ConversationStep:
+    """
+    Stateless adaptive interview engine: given the conversation so far, return
+    the next question to ask (with optional touch quick-reply options), or
+    signal that enough history has been gathered. The caller (frontend) owns
+    conversation state and resends the full history each turn; nothing is
+    persisted server-side until the interview is complete and
+    /generate-summary is called with the resulting transcript.
+    """
+    messages = [{"role": "system", "content": CONVERSE_SYSTEM_PROMPT}]
+    if not request.history:
+        messages.append({"role": "user", "content": "[Interview starting. Ask the first question.]"})
+    else:
+        for turn in request.history:
+            role = "assistant" if turn.role == "assistant" else "user"
+            messages.append({"role": role, "content": turn.content})
+
+    try:
+        completion = client.beta.chat.completions.parse(
+            model="gpt-4o-2024-08-06",
+            messages=messages,
+            response_format=ConversationStep,
+        )
+    except OpenAIError as exc:
+        raise HTTPException(status_code=502, detail=f"OpenAI API error: {exc}") from exc
+
+    message = completion.choices[0].message
+
+    if message.refusal:
+        raise HTTPException(status_code=422, detail=f"Model refused to continue interview: {message.refusal}")
+
+    parsed = message.parsed
+    if parsed is None:
+        raise HTTPException(status_code=502, detail="Model did not return a parsed structured output.")
+
+    return parsed
+
+
+@app.post("/generate-summary", response_model=PatientHistoryRecord)
+async def generate_summary(request: GenerateSummaryRequest) -> PatientHistoryRecord:
+    """
+    Synthesize a conversational history transcript and/or previously-extracted
+    document data into a single unified ClinicalHistorySummary, persist it to
+    patient_histories, and return the inserted record. This is the Module C
+    'Structured History Summary Generator' step: it runs after /converse
+    completes and/or after one or more /upload-document calls.
+    """
+    if not request.transcript and not request.documents:
+        raise HTTPException(status_code=400, detail="At least one of transcript or documents must be provided.")
+
+    user_content_parts = []
+    if request.transcript:
+        user_content_parts.append(f"Conversational history transcript:\n{request.transcript}")
+    if request.documents:
+        docs_json = json.dumps([d.model_dump() for d in request.documents], indent=2)
+        user_content_parts.append(f"Extracted data from {len(request.documents)} prior medical document(s):\n{docs_json}")
+
+    try:
+        completion = client.beta.chat.completions.parse(
+            model="gpt-4o-2024-08-06",
+            messages=[
+                {"role": "system", "content": GENERATE_SUMMARY_SYSTEM_PROMPT},
+                {"role": "user", "content": "\n\n".join(user_content_parts)},
+            ],
+            response_format=ClinicalHistorySummary,
+        )
+    except OpenAIError as exc:
+        raise HTTPException(status_code=502, detail=f"OpenAI API error: {exc}") from exc
+
+    message = completion.choices[0].message
+
+    if message.refusal:
+        raise HTTPException(status_code=422, detail=f"Model refused to synthesize summary: {message.refusal}")
+
+    parsed = message.parsed
+    if parsed is None:
+        raise HTTPException(status_code=502, detail="Model did not return a parsed structured output.")
+
+    record = _persist_history(parsed)
+
+    return record
+
+
+@app.get("/patient-histories/{history_id}", response_model=PatientHistoryRecord)
+async def get_patient_history(history_id: str) -> PatientHistoryRecord:
+    """Fetch a single patient history row, for the physician review screen to load before editing."""
+    try:
+        response = supabase.table(PATIENT_HISTORIES_TABLE).select("*").eq("id", history_id).execute()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to query patient_histories: {exc}") from exc
+
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Patient history not found.")
+
+    return response.data[0]
+
+
+@app.patch("/patient-histories/{history_id}", response_model=PatientHistoryRecord)
+async def update_patient_history(history_id: str, update: PatientHistoryUpdate) -> PatientHistoryRecord:
+    """
+    Apply physician edits to a saved patient history (Module C: 'the summary
+    is a draft to accept, amend, or reject'). Only fields explicitly supplied
+    in the request body are updated.
+    """
+    payload = update.model_dump(exclude_unset=True)
+    if not payload:
+        raise HTTPException(status_code=400, detail="No fields provided to update.")
+
+    try:
+        response = (
+            supabase.table(PATIENT_HISTORIES_TABLE)
+            .update(payload)
+            .eq("id", history_id)
+            .execute()
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to update patient_histories: {exc}") from exc
+
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Patient history not found.")
+
+    return response.data[0]
+
+
+@app.get("/api/v1/priority-alerts", response_model=WaitingRoomResponse)
+async def get_priority_alerts() -> WaitingRoomResponse:
+    """
+    Return unacknowledged patient histories with detected red flags, oldest
+    first, for a triage dashboard to poll — the backend half of the 'AI flags
+    emergency symptoms and triggers immediate priority alert to triage staff'
+    requirement.
+    """
+    try:
+        response = (
+            supabase.table(PATIENT_HISTORIES_TABLE)
+            .select("*")
+            .eq("red_flags_detected", True)
+            .eq("alert_acknowledged", False)
+            .order("created_at", desc=False)
+            .execute()
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to query priority alerts: {exc}") from exc
+
+    return WaitingRoomResponse(histories=response.data)
+
+
+@app.post("/patient-histories/{history_id}/acknowledge-alert", response_model=PatientHistoryRecord)
+async def acknowledge_alert(history_id: str) -> PatientHistoryRecord:
+    """Mark a red-flag alert as acknowledged by triage staff."""
+    try:
+        response = (
+            supabase.table(PATIENT_HISTORIES_TABLE)
+            .update({"alert_acknowledged": True})
+            .eq("id", history_id)
+            .execute()
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to acknowledge alert: {exc}") from exc
+
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Patient history not found.")
+
+    return response.data[0]
+
+
+# ---------------------------------------------------------------------------
+# Mock ABDM / Hospital Information System integrations
+#
+# Per claude.md.md: "Implement mock endpoints for ABDM/Hospital integrations.
+# Do not build real database connections during the hackathon." These stand
+# in for the real ABDM Gateway (ABHA verification) and hospital HIS/FHIR push
+# until real ABDM sandbox credentials are available.
+# ---------------------------------------------------------------------------
+
+
+@app.post("/abdm/verify-abha", response_model=AbhaVerificationResult)
+async def verify_abha(request: AbhaVerificationRequest) -> AbhaVerificationResult:
+    """Mock ABHA ID verification, standing in for a real ABDM Gateway call."""
+    return AbhaVerificationResult(
+        abha_id=request.abha_id,
+        verified=True,
+        patient_name="Mock Patient",
+        date_of_birth="1990-01-01",
+        gender="unspecified",
+    )
+
+
+@app.post("/abdm/push-to-his", response_model=HisPushResult)
+async def push_to_his(request: HisPushRequest) -> HisPushResult:
+    """
+    Mock push of a patient_histories record to the Hospital Information
+    System and ABHA Personal Health Record, standing in for a real FHIR-based
+    integration. Confirms the history exists before returning a mock
+    confirmation.
+    """
+    try:
+        response = supabase.table(PATIENT_HISTORIES_TABLE).select("id").eq("id", request.history_id).execute()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to look up patient_histories: {exc}") from exc
+
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Patient history not found.")
+
+    return HisPushResult(
+        history_id=request.history_id,
+        abha_id=request.abha_id,
+        his_record_id=str(uuid.uuid4()),
+        status="submitted",
+    )
