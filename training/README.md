@@ -44,3 +44,12 @@ Training summary: `training/outputs/best_model/training_summary.txt`
 Metrics: `training/outputs/metrics.json`  
 Preprocessing: `training/train.py`  
 Inference script: `training/inference.py`
+
+## Qwen adapter experiment
+
+`train_qwen_qlora.py` fine-tunes `Qwen/Qwen2.5-1.5B-Instruct` on the 81 available
+prescription transcriptions. The requested 4-bit QLoRA loader crashed with a
+native Windows bitsandbytes access violation before training, so the successful
+run used a BF16 LoRA adapter instead. It completed 3 epochs on the RTX 4050;
+this is a transcription-domain adapter and does not teach bilingual clinical
+question behavior. Adapter files are in `outputs/qwen2.5-1.5b-qlora/`.

@@ -1,0 +1,12 @@
+{
+  "base_model": "Qwen/Qwen2.5-1.5B-Instruct",
+  "method": "LoRA fallback",
+  "quantization": "none (bitsandbytes 4-bit loader crashes on this Windows runtime)",
+  "examples": 81,
+  "epochs": 3,
+  "batch_size": 1,
+  "gradient_accumulation_steps": 8,
+  "learning_rate": 5e-05,
+  "gpu": "NVIDIA GeForce RTX 4050 Laptop GPU",
+  "vram_gib": 5.99658203125
+}
