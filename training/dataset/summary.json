@@ -1,0 +1,28 @@
+{
+  "total_json": 105,
+  "valid_pairs": 102,
+  "errors": [
+    {
+      "file": "C:\\Users\\LENOVO\\.cache\\kagglehub\\datasets\\codinganirbanb\\doctor-prescription-labelled-dataset\\versions\\1\\prepared_image_data\\66\\66.json",
+      "reason": "JSONDecodeError: Expecting value: line 1 column 1 (char 0)"
+    },
+    {
+      "file": "C:\\Users\\LENOVO\\.cache\\kagglehub\\datasets\\codinganirbanb\\doctor-prescription-labelled-dataset\\versions\\1\\prepared_image_data\\83\\83.json",
+      "reason": "duplicate image",
+      "duplicate_of": "C:\\Users\\LENOVO\\.cache\\kagglehub\\datasets\\codinganirbanb\\doctor-prescription-labelled-dataset\\versions\\1\\prepared_image_data\\114\\114.jpg"
+    },
+    {
+      "file": "C:\\Users\\LENOVO\\.cache\\kagglehub\\datasets\\codinganirbanb\\doctor-prescription-labelled-dataset\\versions\\1\\prepared_image_data\\94\\94.json",
+      "reason": "duplicate image",
+      "duplicate_of": "C:\\Users\\LENOVO\\.cache\\kagglehub\\datasets\\codinganirbanb\\doctor-prescription-labelled-dataset\\versions\\1\\prepared_image_data\\61\\61.jpg"
+    }
+  ],
+  "splits": {
+    "train": 81,
+    "validation": 10,
+    "test": 11
+  },
+  "annotation_format": "JSON sidecars; transcription from complete_extracted_text or equivalent full-text key",
+  "classes": [],
+  "bounding_boxes": false
+}
