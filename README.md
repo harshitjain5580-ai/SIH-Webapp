@@ -44,10 +44,15 @@ Full architecture rules, tech stack, and the clinical data contracts live in [`c
    ```
    API docs available at `http://127.0.0.1:8000/docs`.
 
-   The AI provider defaults to OpenAI. To use Grok, set `AI_PROVIDER=xai`,
+   The AI provider defaults to OpenAI. To use Grok for the existing extraction
+   endpoints, set `AI_PROVIDER=xai`,
    `GROK_API_KEY`, and optionally `AI_MODEL` (for example,
    `grok-4.6`) in `.env`. Both providers use the same
    OpenAI-compatible client; no API key is committed to the repository.
+
+   The `/ask-clinical-question` endpoint uses the local bilingual Qwen adapter
+   from `training/outputs/qwen2.5-1.5b-bilingual-lora/` and does not require an
+   API key. The adapter is loaded lazily on its first request.
 
 ## For the Frontend Team
 
