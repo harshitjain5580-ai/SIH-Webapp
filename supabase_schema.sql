@@ -31,6 +31,41 @@ create table if not exists public.patient_histories (
     red_flags_detected   boolean not null default false
 );
 
+create table if not exists public.patient_profiles (
+    patient_id           text primary key,
+    created_at           timestamptz not null default now(),
+    name                 text,
+    age                  integer,
+    allergies            jsonb not null default '[]'::jsonb,
+    medication_allergies jsonb not null default '[]'::jsonb,
+    chronic_conditions   jsonb not null default '[]'::jsonb,
+    ongoing_medications  jsonb not null default '[]'::jsonb,
+    notes                text,
+    last_updated         timestamptz not null default now()
+);
+
+create table if not exists public.doctor_approved_cases (
+    case_id              uuid primary key default gen_random_uuid(),
+    created_at           timestamptz not null default now(),
+    patient_id           text not null,
+    transcript           text not null,
+    summary              text not null,
+    diagnoses            jsonb not null default '[]'::jsonb,
+    treatment_plan       jsonb not null default '[]'::jsonb,
+    approved_by          text not null,
+    tags                 jsonb not null default '[]'::jsonb
+);
+
+create table if not exists public.patient_reports (
+    report_id            uuid primary key default gen_random_uuid(),
+    patient_id           text not null,
+    report_type          text not null,
+    report_date          text,
+    summary              text not null,
+    notes                text,
+    created_at           timestamptz not null default now()
+);
+
 -- Added for the physician edit/confirm workflow and red-flag triage alerts.
 alter table public.patient_histories
     add column if not exists alert_acknowledged boolean not null default false;
