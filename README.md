@@ -76,6 +76,35 @@ Invoke-RestMethod `
 
 The first local-model request loads Qwen and may take a few seconds. The adapter is trained for question phrasing, not diagnosis, treatment, or clinical decision-making.
 
+## Voice assistant support
+
+The backend includes voice helpers for patient and doctor workflows:
+
+- `POST /voice/transcribe` — upload an audio file and get text transcription
+- `POST /voice/speak` — convert text into spoken audio
+- `POST /voice/patient-assistant` — speak the patient's problem, transcribe it, and return the next question
+- `POST /doctor/voice-note` — transcribe a doctor's voice note or dictation
+
+Use `VOICE_PROVIDER=local` for a self-hosted assistant with faster-whisper speech recognition and pyttsx3 speech synthesis. Install the dependencies with `pip install -r requirements.txt`; the first Whisper request downloads the selected model. Set `LOCAL_WHISPER_MODEL=small` (or `base` for less memory) and optionally `LOCAL_WHISPER_DEVICE=cuda`. OpenAI and Bhashini remain available with their respective provider settings.
+
+This repository also includes a safer, controlled profile and review flow:
+
+- `POST /patient/profile` — store allergies, chronic conditions, and medicine history for a patient
+- `GET /patient/profile/{patient_id}` — fetch the known profile to avoid repeating allergy questions
+- `POST /patient/report` — save a previous medical report or past-visit summary
+- `GET /patient/reports/{patient_id}` — fetch earlier reports so follow-up questions can use past context
+- `POST /patient/intake-start` — ask whether previous medical history exists before deeper questioning
+- `POST /doctor/approved-case` — store a doctor-reviewed case for a curated training dataset
+- `python training/build_doctor_case_dataset.py` — generate a small JSONL dataset from approved cases for future model improvement
+
+Important: automatic self-training from every live patient interaction is not enabled in this repo. Approved, sanitized cases are stored for controlled review and retraining, which is the safer healthcare pattern.
+
+## Learn how training works
+
+For a beginner-friendly, step-by-step explanation of the dataset, tokenizer,
+fine-tuning, LoRA adapter, training settings, inference flow, and limitations,
+see [`training/README.md`](training/README.md#how-the-model-was-trained-class-10-explanation).
+
 ## Database (Supabase)
 
 The database schema is defined in [`supabase_schema.sql`](supabase_schema.sql):
@@ -93,7 +122,7 @@ If the team is sharing a single Supabase project, ask whoever created it for the
 claude.md.md          Architecture rules, tech stack, and JSON data contracts
 main.py                FastAPI app and API routes
 local_bilingual_model.py Lazy loader for the local Qwen bilingual adapter
-bilingual_clinical_conversation_questions.xlsx Training question dataset
+bilingual_clinical_conversation_questions.xlsx / trilingual_clinical_conversation_questions.xlsx Training question datasets
 training/               Dataset preparation, training scripts, adapters, and metrics
 supabase_schema.sql     Database schema, storage bucket, and RLS policies
 requirements.txt        Python dependencies
