@@ -113,6 +113,7 @@ class TranscriptRequest(BaseModel):
     """Request body for the /extract-history endpoint."""
 
     transcript: str = Field(description="Raw patient conversation transcript to extract structured history from.")
+    patient_id: Optional[str] = Field(default=None, description="Optional patient identifier for retrieving known allergy and previous report context.")
 
 
 class ConversationalQuestionResponse(BaseModel):
@@ -155,6 +156,18 @@ class PatientProfile(BaseModel):
     ongoing_medications: List[str] = Field(default_factory=list, description="Current medications the patient is already taking.")
     notes: Optional[str] = Field(default=None, description="Doctor or patient notes to remember across visits.")
     last_updated: Optional[str] = Field(default=None, description="Last updated timestamp, if provided by the client.")
+
+
+class PatientReport(BaseModel):
+    """A saved previous report or record that the model can reuse for follow-up questioning."""
+
+    report_id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Stable identifier for the stored report.")
+    patient_id: str = Field(description="Patient identifier associated with the saved report.")
+    report_type: str = Field(description="Type of report, such as lab, prescription, previous-visit, or doctor-note.")
+    report_date: Optional[str] = Field(default=None, description="Report date, if known.")
+    summary: str = Field(description="Condensed summary of the past report or medical history.")
+    notes: Optional[str] = Field(default=None, description="Detailed notes from the report.")
+    created_at: Optional[str] = Field(default=None, description="Saved timestamp.")
 
 
 class ApprovedTrainingCase(BaseModel):
@@ -264,6 +277,7 @@ class DocumentExtractionInput(BaseModel):
 class GenerateSummaryRequest(BaseModel):
     """Request body for POST /generate-summary."""
 
+    patient_id: Optional[str] = Field(default=None, description="Patient ID for associating prior reports and allergy context to the generated summary.")
     transcript: Optional[str] = Field(
         default=None, description="Conversational history transcript, if a voice/touch interview was conducted."
     )
@@ -414,6 +428,54 @@ def _safe_supabase_select(table_name: str, key: str, value: str) -> Optional[dic
     except Exception as exc:
         logger.warning("Supabase table %s not available or select failed: %s", table_name, exc)
     return None
+
+
+def _safe_supabase_query(table_name: str, key: str, value: str) -> List[dict]:
+    try:
+        response = supabase.table(table_name).select("*").eq(key, value).execute()
+        return response.data or []
+    except Exception as exc:
+        logger.warning("Supabase table %s not available or list query failed: %s", table_name, exc)
+        return []
+
+
+def _get_patient_context(patient_id: Optional[str]) -> str:
+    if not patient_id:
+        return ""
+
+    profile = _safe_supabase_select("patient_profiles", "patient_id", patient_id)
+    reports = _safe_supabase_query("patient_reports", "patient_id", patient_id)
+
+    parts = []
+    if profile:
+        allergies = profile.get("allergies") or []
+        medication_allergies = profile.get("medication_allergies") or []
+        chronic = profile.get("chronic_conditions") or []
+        meds = profile.get("ongoing_medications") or []
+        if allergies or medication_allergies or chronic or meds:
+            parts.append(
+                "Known patient profile: "
+                + "; ".join(
+                    filter(
+                        None,
+                        [
+                            f"Allergies: {', '.join(allergies)}" if allergies else None,
+                            f"Medicine allergies: {', '.join(medication_allergies)}" if medication_allergies else None,
+                            f"Chronic conditions: {', '.join(chronic)}" if chronic else None,
+                            f"Current medications: {', '.join(meds)}" if meds else None,
+                        ],
+                    )
+                )
+            )
+    if reports:
+        summaries = []
+        for report in reports[:5]:
+            summary = report.get("summary")
+            if summary:
+                summaries.append(summary)
+        if summaries:
+            parts.append("Previous medical reports: " + " | ".join(summaries))
+    return "\n".join(parts)
 
 
 def _normalize_voice_text(payload: object) -> str:
@@ -690,6 +752,24 @@ def _persist_history(summary: ClinicalHistorySummary) -> dict:
     return response.data[0]
 
 
+def _store_patient_report(patient_id: Optional[str], summary: ClinicalHistorySummary, report_type: str = "summary") -> None:
+    if not patient_id:
+        return
+    report_data = {
+        "patient_id": patient_id,
+        "report_type": report_type,
+        "report_date": datetime.utcnow().date().isoformat(),
+        "summary": f"{summary.chief_complaint} | {summary.hpi_socrates}",
+        "notes": json.dumps({
+            "current_medications": [m.model_dump() for m in summary.current_medications],
+            "red_flags_detected": summary.red_flags_detected,
+            "ayush_parameters": summary.ayush_parameters.model_dump(),
+        }, ensure_ascii=False),
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    _safe_supabase_insert("patient_reports", report_data)
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -771,6 +851,40 @@ async def get_patient_profile(patient_id: str) -> PatientProfile:
     raise HTTPException(status_code=404, detail=f"Patient profile not found for {patient_id}.")
 
 
+@app.post("/patient/report", response_model=PatientReport)
+async def save_patient_report(report: PatientReport) -> PatientReport:
+    """Store a previous patient report so the model can reuse that history during follow-up questioning."""
+    payload = report.model_dump()
+    payload["created_at"] = payload.get("created_at") or datetime.utcnow().isoformat()
+    stored = _safe_supabase_insert("patient_reports", payload)
+    if stored:
+        return PatientReport(**stored)
+    return report
+
+
+@app.get("/patient/reports/{patient_id}", response_model=List[PatientReport])
+async def get_patient_reports(patient_id: str) -> List[PatientReport]:
+    """Fetch earlier patient reports so the model can contextually cross-question and advise."""
+    records = _safe_supabase_query("patient_reports", "patient_id", patient_id)
+    return [PatientReport(**record) for record in records]
+
+
+@app.post("/patient/intake-start", response_model=ConversationalQuestionResponse)
+async def patient_intake_start(patient_id: str, has_previous_history: bool = False) -> ConversationalQuestionResponse:
+    """Begin intake by asking whether the patient has prior reports or medical history, first and before deeper questioning."""
+    if has_previous_history:
+        return ConversationalQuestionResponse(
+            reply="Please tell me about your previous medical reports, past illnesses, surgeries, allergies, or recent medications. If you have a lab report or prescription, you can describe it here.",
+            language="English",
+            red_flags_detected=False,
+        )
+    return ConversationalQuestionResponse(
+        reply="Do you have any previous medical history or reports? If yes, tell me about them. If not, just say 'No previous history' and we will start fresh.",
+        language="English",
+        red_flags_detected=False,
+    )
+
+
 @app.post("/doctor/approved-case", response_model=ApprovedTrainingCase)
 async def doctor_approved_case(case: ApprovedTrainingCase) -> ApprovedTrainingCase:
     """Store a doctor-reviewed medical case for a curated learning dataset. This is a review-controlled path, not automatic live training."""
@@ -787,18 +901,30 @@ async def doctor_approved_case(case: ApprovedTrainingCase) -> ApprovedTrainingCa
 
 @app.post("/ask-clinical-question", response_model=ConversationalQuestionResponse)
 async def ask_clinical_question(request: TranscriptRequest) -> ConversationalQuestionResponse:
-    """Ask the next bilingual intake question without diagnosing or prescribing."""
+    """Ask the next bilingual intake question while using prior patient reports and medical context when available."""
     if not request.transcript.strip():
         raise HTTPException(status_code=400, detail="Transcript must not be empty.")
+
+    patient_context = _get_patient_context(request.patient_id)
+    if request.patient_id and not patient_context:
+        return ConversationalQuestionResponse(
+            reply="Do you have any previous medical history or reports? If yes, tell me about past illnesses, surgeries, allergies, or previous reports. If not, say 'No previous history' and we will start fresh.",
+            language="English",
+            red_flags_detected=False,
+        )
+
+    prompt_text = request.transcript
+    if patient_context:
+        prompt_text = f"Known patient context:\n{patient_context}\n\nCurrent patient message:\n{request.transcript}"
 
     try:
         from local_bilingual_model import ask
 
-        reply = await asyncio.to_thread(ask, request.transcript)
+        reply = await asyncio.to_thread(ask, prompt_text)
     except (FileNotFoundError, RuntimeError, OSError) as exc:
         logger.exception("Local bilingual model inference failed.")
         raise HTTPException(status_code=503, detail=f"Local bilingual model unavailable: {exc}") from exc
-    lower = request.transcript.lower()
+    lower = prompt_text.lower()
     hindi = any("\u0900" <= char <= "\u097f" for char in request.transcript)
     hinglish = any(word in lower for word in ("mere", "pet", "dard", "hai", "hue", "kaise"))
     urgent = any(word in lower for word in ("chest pain", "breathing", "faint", "stroke", "बेहोश", "सीने"))
@@ -837,10 +963,13 @@ async def extract_history(request: TranscriptRequest) -> PatientHistoryRecord:
         raise HTTPException(status_code=422, detail=f"Model refused to process transcript: {message.refusal}")
 
     parsed = message.parsed
+
     if parsed is None:
         raise HTTPException(status_code=502, detail="Model did not return a parsed structured output.")
 
     record = _persist_history(parsed)
+    if request.patient_id:
+        _store_patient_report(request.patient_id, parsed, report_type="summary")
 
     return record
 
@@ -1076,6 +1205,8 @@ async def generate_summary(request: GenerateSummaryRequest) -> PatientHistoryRec
         raise HTTPException(status_code=502, detail="Model did not return a parsed structured output.")
 
     record = _persist_history(parsed)
+    if request.patient_id:
+        _store_patient_report(request.patient_id, parsed, report_type="summary")
 
     return record
 

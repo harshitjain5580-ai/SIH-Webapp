@@ -91,6 +91,9 @@ This repository also includes a safer, controlled profile and review flow:
 
 - `POST /patient/profile` — store allergies, chronic conditions, and medicine history for a patient
 - `GET /patient/profile/{patient_id}` — fetch the known profile to avoid repeating allergy questions
+- `POST /patient/report` — save a previous medical report or past-visit summary
+- `GET /patient/reports/{patient_id}` — fetch earlier reports so follow-up questions can use past context
+- `POST /patient/intake-start` — ask whether previous medical history exists before deeper questioning
 - `POST /doctor/approved-case` — store a doctor-reviewed case for a curated training dataset
 - `python training/build_doctor_case_dataset.py` — generate a small JSONL dataset from approved cases for future model improvement
 

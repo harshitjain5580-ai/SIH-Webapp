@@ -56,6 +56,16 @@ create table if not exists public.doctor_approved_cases (
     tags                 jsonb not null default '[]'::jsonb
 );
 
+create table if not exists public.patient_reports (
+    report_id            uuid primary key default gen_random_uuid(),
+    patient_id           text not null,
+    report_type          text not null,
+    report_date          text,
+    summary              text not null,
+    notes                text,
+    created_at           timestamptz not null default now()
+);
+
 -- Added for the physician edit/confirm workflow and red-flag triage alerts.
 alter table public.patient_histories
     add column if not exists alert_acknowledged boolean not null default false;
