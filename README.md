@@ -85,7 +85,7 @@ The backend includes voice helpers for patient and doctor workflows:
 - `POST /voice/patient-assistant` — speak the patient's problem, transcribe it, and return the next question
 - `POST /doctor/voice-note` — transcribe a doctor's voice note or dictation
 
-Use `VOICE_PROVIDER=openai` for OpenAI transcription and TTS, or set `VOICE_PROVIDER=bhashini` with the Bhashini ASR/TTS URLs and API key for Indian-language voice integration.
+Use `VOICE_PROVIDER=local` for a self-hosted assistant with faster-whisper speech recognition and pyttsx3 speech synthesis. Install the dependencies with `pip install -r requirements.txt`; the first Whisper request downloads the selected model. Set `LOCAL_WHISPER_MODEL=small` (or `base` for less memory) and optionally `LOCAL_WHISPER_DEVICE=cuda`. OpenAI and Bhashini remain available with their respective provider settings.
 
 This repository also includes a safer, controlled profile and review flow:
 

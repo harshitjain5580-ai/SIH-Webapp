@@ -25,6 +25,7 @@ import json
 import logging
 import os
 import re
+import tempfile
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -349,12 +350,86 @@ else:
 client = OpenAI(api_key=AI_API_KEY, base_url=AI_BASE_URL)
 
 VOICE_PROVIDER = os.environ.get("VOICE_PROVIDER", "openai").lower()
+LOCAL_WHISPER_MODEL = os.environ.get("LOCAL_WHISPER_MODEL", "small")
+LOCAL_WHISPER_DEVICE = os.environ.get("LOCAL_WHISPER_DEVICE", "auto")
 BHASHINI_API_KEY = os.environ.get("BHASHINI_API_KEY")
 BHASHINI_ASR_URL = os.environ.get("BHASHINI_ASR_URL")
 BHASHINI_TTS_URL = os.environ.get("BHASHINI_TTS_URL")
 BHASHINI_USER_ID = os.environ.get("BHASHINI_USER_ID")
 OPENAI_TTS_MODEL = os.environ.get("OPENAI_TTS_MODEL", "gpt-4o-mini-tts")
 OPENAI_TTS_VOICE = os.environ.get("OPENAI_TTS_VOICE", "sage")
+
+_local_whisper = None
+_local_whisper_lock = Lock()
+
+
+def _load_local_whisper():
+    global _local_whisper
+    if _local_whisper is None:
+        with _local_whisper_lock:
+            if _local_whisper is None:
+                try:
+                    from faster_whisper import WhisperModel
+                except ImportError as exc:
+                    raise RuntimeError(
+                        "Local voice requires faster-whisper. Install it with 'pip install faster-whisper'."
+                    ) from exc
+                device = "cpu" if LOCAL_WHISPER_DEVICE == "auto" else LOCAL_WHISPER_DEVICE
+                compute_type = "float16" if device == "cuda" else "int8"
+                _local_whisper = WhisperModel(
+                    LOCAL_WHISPER_MODEL,
+                    device=device,
+                    compute_type=compute_type,
+                )
+    return _local_whisper
+
+
+def _transcribe_locally(audio_bytes: bytes, language: str, filename: str) -> VoiceTranscriptionResult:
+    model = _load_local_whisper()
+    suffix = Path(filename).suffix or ".wav"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as audio_file:
+        audio_file.write(audio_bytes)
+        audio_path = audio_file.name
+    try:
+        language_code = language.split("-")[0] if language and language.lower() not in ("auto", "hinglish") else None
+        segments, info = model.transcribe(
+            audio_path,
+            language=language_code,
+            beam_size=5,
+            vad_filter=True,
+        )
+        text = " ".join(segment.text.strip() for segment in segments).strip()
+    finally:
+        Path(audio_path).unlink(missing_ok=True)
+    if not text:
+        raise RuntimeError("Local speech recognition returned no transcription text.")
+    detected_language = getattr(info, "language", None) or language or "en"
+    return VoiceTranscriptionResult(text=text, provider="local", language=detected_language)
+
+
+def _synthesize_locally(text: str, language: str) -> VoiceSynthesisResult:
+    try:
+        import pyttsx3
+    except ImportError as exc:
+        raise RuntimeError("Local voice requires pyttsx3. Install it with 'pip install pyttsx3'.") from exc
+    engine = pyttsx3.init()
+    engine.setProperty("rate", int(os.environ.get("LOCAL_TTS_RATE", "155")))
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as audio_file:
+        audio_path = audio_file.name
+    try:
+        engine.save_to_file(text, audio_path)
+        engine.runAndWait()
+        audio_bytes = Path(audio_path).read_bytes()
+    finally:
+        Path(audio_path).unlink(missing_ok=True)
+    if not audio_bytes:
+        raise RuntimeError("Local text-to-speech returned no audio.")
+    return VoiceSynthesisResult(
+        provider="local",
+        language=language,
+        mime_type="audio/wav",
+        audio_base64=base64.b64encode(audio_bytes).decode("utf-8"),
+    )
 
 DEVANAGARI_MAP = {
     "अ": "a", "आ": "aa", "इ": "i", "ई": "ee", "उ": "u", "ऊ": "oo", "ए": "e", "ऐ": "ai", "ओ": "o", "औ": "au",
@@ -575,6 +650,9 @@ async def _transcribe_voice_upload(file: UploadFile, language: str) -> VoiceTran
     if not contents:
         raise HTTPException(status_code=400, detail="Uploaded audio is empty.")
 
+    if VOICE_PROVIDER == "local":
+        return _transcribe_locally(contents, language, file.filename or "voice.wav")
+
     if VOICE_PROVIDER in ("openai", "default"):
         if AI_API_KEY in (None, "not-set"):
             raise RuntimeError("OPENAI_API_KEY is required to use the OpenAI voice pipeline.")
@@ -597,6 +675,9 @@ async def _transcribe_voice_upload(file: UploadFile, language: str) -> VoiceTran
 
 
 async def _synthesize_voice_text(text: str, language: str) -> VoiceSynthesisResult:
+    if VOICE_PROVIDER == "local":
+        return _synthesize_locally(text, language)
+
     if VOICE_PROVIDER in ("openai", "default"):
         if AI_API_KEY in (None, "not-set"):
             raise RuntimeError("OPENAI_API_KEY is required to use the OpenAI voice synthesis pipeline.")

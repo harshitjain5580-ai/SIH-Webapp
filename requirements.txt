@@ -5,3 +5,5 @@ openai
 supabase
 python-multipart
 python-dotenv
+faster-whisper
+pyttsx3
