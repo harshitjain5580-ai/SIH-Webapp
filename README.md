@@ -87,17 +87,14 @@ The backend includes voice helpers for patient and doctor workflows:
 
 Use `VOICE_PROVIDER=openai` for OpenAI transcription and TTS, or set `VOICE_PROVIDER=bhashini` with the Bhashini ASR/TTS URLs and API key for Indian-language voice integration.
 
-For Hindi/Hinglish voice transcripts, the backend normalizes common spoken variants such as `mere pet mae dard hae`, `main`, and `dard hai` before passing them to the model. This improves reliability for Bhashini and simpler speech-to-text results.
+This repository also includes a safer, controlled profile and review flow:
 
-## Doctor-approved retraining queue
+- `POST /patient/profile` — store allergies, chronic conditions, and medicine history for a patient
+- `GET /patient/profile/{patient_id}` — fetch the known profile to avoid repeating allergy questions
+- `POST /doctor/approved-case` — store a doctor-reviewed case for a curated training dataset
+- `python training/build_doctor_case_dataset.py` — generate a small JSONL dataset from approved cases for future model improvement
 
-This project does not auto-train on every raw patient question. That would be unsafe in a clinical system. Instead, the backend exposes a doctor-approved learning queue:
-
-- `POST /learning/record-case` — store a case only when `approved_by_doctor=true`
-- `GET /learning/approved-cases` — inspect the queue
-- `POST /learning/retrain` — trigger a manual retraining run from approved data only
-
-The dataset is written to `training/approved_cases.jsonl`, and `training/prepare_approved_dataset.py` converts the approved cases into a model-friendly JSONL training file.
+Important: automatic self-training from every live patient interaction is not enabled in this repo. Approved, sanitized cases are stored for controlled review and retraining, which is the safer healthcare pattern.
 
 ## Learn how training works
 

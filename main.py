@@ -20,11 +20,13 @@ claude.md.md:
 
 import asyncio
 import base64
+import io
 import json
 import logging
 import os
 import re
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 from urllib import request
@@ -139,6 +141,33 @@ class VoiceSynthesisResult(BaseModel):
     language: str = Field(description="Language used for synthesis.")
     mime_type: str = Field(description="Audio MIME type returned by the provider.")
     audio_base64: str = Field(description="Base64-encoded audio data for playback in a mobile or web app.")
+
+
+class PatientProfile(BaseModel):
+    """Long-term patient medical profile used to avoid repeated allergy and medication questions."""
+
+    patient_id: str = Field(description="Stable identifier for the person or login account.")
+    name: Optional[str] = Field(default=None, description="Patient name if available.")
+    age: Optional[int] = Field(default=None, description="Patient age in years, if known.")
+    allergies: List[str] = Field(default_factory=list, description="Known allergies, including medicines, food, and environmental triggers.")
+    medication_allergies: List[str] = Field(default_factory=list, description="Medicine-specific allergies already known.")
+    chronic_conditions: List[str] = Field(default_factory=list, description="Known chronic medical conditions.")
+    ongoing_medications: List[str] = Field(default_factory=list, description="Current medications the patient is already taking.")
+    notes: Optional[str] = Field(default=None, description="Doctor or patient notes to remember across visits.")
+    last_updated: Optional[str] = Field(default=None, description="Last updated timestamp, if provided by the client.")
+
+
+class ApprovedTrainingCase(BaseModel):
+    """A doctor-reviewed medical case that may be added to a curated training dataset."""
+
+    case_id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Stable identifier for the approved case.")
+    patient_id: str = Field(description="Patient identifier for the case.")
+    transcript: str = Field(description="Conversation transcript or patient story to preserve for future model learning.")
+    summary: str = Field(description="Doctor-reviewed summary of the case.")
+    diagnoses: List[str] = Field(default_factory=list, description="Approved diagnoses associated with the case.")
+    treatment_plan: List[str] = Field(default_factory=list, description="Treatment or management notes approved by the doctor.")
+    approved_by: str = Field(description="Doctor or reviewing clinician identifier.")
+    tags: List[str] = Field(default_factory=list, description="Labels such as 'cardiology', 'dermatology', 'pain', 'follow_up'.")
 
 
 class PatientHistoryRecord(BaseModel):
@@ -312,49 +341,79 @@ BHASHINI_TTS_URL = os.environ.get("BHASHINI_TTS_URL")
 BHASHINI_USER_ID = os.environ.get("BHASHINI_USER_ID")
 OPENAI_TTS_MODEL = os.environ.get("OPENAI_TTS_MODEL", "gpt-4o-mini-tts")
 OPENAI_TTS_VOICE = os.environ.get("OPENAI_TTS_VOICE", "sage")
-TRAINING_DATA_PATH = Path(os.environ.get("APPROVED_CASES_PATH", "training/approved_cases.jsonl"))
+
+DEVANAGARI_MAP = {
+    "अ": "a", "आ": "aa", "इ": "i", "ई": "ee", "उ": "u", "ऊ": "oo", "ए": "e", "ऐ": "ai", "ओ": "o", "औ": "au",
+    "क": "k", "ख": "kh", "ग": "g", "घ": "gh", "च": "ch", "छ": "chh", "ज": "j", "झ": "jh", "ट": "t", "ठ": "th",
+    "ड": "d", "ढ": "dh", "ण": "n", "त": "t", "थ": "th", "द": "d", "ध": "dh", "न": "n", "प": "p", "फ": "ph",
+    "ब": "b", "भ": "bh", "म": "m", "य": "y", "र": "r", "ल": "l", "व": "v", "श": "sh", "ष": "sh", "स": "s", "ह": "h",
+    "ं": "n", "ः": "h", "।": ".", "़": "",
+}
+HINGLISH_NORMALIZATIONS = {
+    "mere pet me": "mere pet me",
+    "mere pet mei": "mere pet me",
+    "pet me dard": "pet me dard",
+    "pet me pain": "pet me pain",
+    "hue": "hai",
+    "mai": "main",
+    "mujhe": "mujhe",
+    "haii": "hai",
+    "kaise": "kaise",
+    "kab": "kab",
+    "kya": "kya",
+    "medicine se": "medicine se",
+    "allergy": "allergy",
+    "allergies": "allergies",
+}
 
 
-def _normalize_language_code(language: str) -> str:
-    value = (language or "en").strip().lower()
-    aliases = {
-        "en": "en",
-        "english": "en",
-        "hi": "hi",
-        "hindi": "hi",
-        "hin": "hi",
-        "hi-in": "hi",
-        "hinglish": "hi",
-        "bn": "bn",
-        "bengali": "bn",
-        "mr": "mr",
-        "marathi": "mr",
-        "ta": "ta",
-        "tamil": "ta",
-    }
-    return aliases.get(value, value)
+def romanize_hindi_text(text: str) -> str:
+    result = []
+    for char in text:
+        result.append(DEVANAGARI_MAP.get(char, char))
+    normalized = "".join(result)
+    normalized = normalized.replace("aa p", "aap").replace(" hai", " hai")
+    return normalized
 
 
-def _preprocess_multilingual_voice_text(text: str, language: str) -> str:
+def normalize_multilingual_voice_text(text: str, language_hint: Optional[str] = None) -> tuple[str, str]:
     if not text:
-        return ""
-    value = text.strip()
-    lang = _normalize_language_code(language)
-    value = re.sub(r"\s+", " ", value)
-    value = value.replace("\u200c", " ")
-    value = value.replace("\u00a0", " ")
-    if lang in {"hi", "bn", "mr", "ta"}:
-        value = value.replace("\u0964", ".")
-        value = value.replace("\u2018", "'").replace("\u2019", "'")
-        value = value.replace("\u201c", '"').replace("\u201d", '"')
-        value = re.sub(r"(?i)\b(kaise|aise|waise|kaisa|aisa|hai|hue|haii|huee)\b", lambda m: m.group(0).lower(), value)
-    if lang == "hi":
-        value = value.replace("mere pet mae dard hae", "mere pet mein dard hai")
-        value = value.replace("mai", "main")
-        value = value.replace("dard hain", "dard hai")
-        value = value.replace("dard h", "dard hai")
-        value = value.replace("mainy", "maine")
-    return value.strip()
+        return "", "en-IN"
+    cleaned = text.strip()
+    has_devanagari = any("\u0900" <= char <= "\u097f" for char in cleaned)
+    if has_devanagari:
+        cleaned = romanize_hindi_text(cleaned)
+        language = "hi-IN"
+    else:
+        lower = cleaned.lower()
+        for source, target in HINGLISH_NORMALIZATIONS.items():
+            lower = lower.replace(source, target)
+        cleaned = lower
+        if re.search(r"\b(mere|pet|dard|hai|kaise|mujhe|kya|kab)\b", cleaned):
+            language = "hi-IN"
+        else:
+            language = language_hint or "en-IN"
+    return cleaned, language
+
+
+def _safe_supabase_insert(table_name: str, payload: dict) -> Optional[dict]:
+    try:
+        response = supabase.table(table_name).insert(payload).execute()
+        if response.data:
+            return response.data[0]
+    except Exception as exc:
+        logger.warning("Supabase table %s not available or insert failed: %s", table_name, exc)
+    return None
+
+
+def _safe_supabase_select(table_name: str, key: str, value: str) -> Optional[dict]:
+    try:
+        response = supabase.table(table_name).select("*").eq(key, value).limit(1).execute()
+        if response.data:
+            return response.data[0]
+    except Exception as exc:
+        logger.warning("Supabase table %s not available or select failed: %s", table_name, exc)
+    return None
 
 
 def _normalize_voice_text(payload: object) -> str:
@@ -454,54 +513,46 @@ async def _transcribe_voice_upload(file: UploadFile, language: str) -> VoiceTran
     if not contents:
         raise HTTPException(status_code=400, detail="Uploaded audio is empty.")
 
-    normalized_language = _normalize_language_code(language)
-
     if VOICE_PROVIDER in ("openai", "default"):
         if AI_API_KEY in (None, "not-set"):
             raise RuntimeError("OPENAI_API_KEY is required to use the OpenAI voice pipeline.")
         transcription = client.audio.transcriptions.create(
             model="gpt-4o-mini-transcribe",
             file=(file.filename or "voice.wav", contents, file.content_type or "audio/wav"),
-            language=normalized_language,
+            language=language,
         )
-        text = _preprocess_multilingual_voice_text((transcription.text or "").strip(), normalized_language)
         return VoiceTranscriptionResult(
-            text=text,
+            text=(transcription.text or "").strip(),
             provider="openai",
-            language=normalized_language,
+            language=language,
             confidence=getattr(transcription, "confidence", None),
         )
 
     if VOICE_PROVIDER == "bhashini":
-        result = _transcribe_with_bhashini(contents, normalized_language, file.filename or "voice.wav")
-        result.text = _preprocess_multilingual_voice_text(result.text, normalized_language)
-        return result
+        return _transcribe_with_bhashini(contents, language, file.filename or "voice.wav")
 
     raise RuntimeError(f"Unsupported VOICE_PROVIDER: {VOICE_PROVIDER}. Set it to 'openai' or 'bhashini'.")
 
 
 async def _synthesize_voice_text(text: str, language: str) -> VoiceSynthesisResult:
-    normalized_language = _normalize_language_code(language)
-    cleaned_text = _preprocess_multilingual_voice_text(text, normalized_language)
-
     if VOICE_PROVIDER in ("openai", "default"):
         if AI_API_KEY in (None, "not-set"):
             raise RuntimeError("OPENAI_API_KEY is required to use the OpenAI voice synthesis pipeline.")
         response = client.audio.speech.create(
             model=OPENAI_TTS_MODEL,
             voice=OPENAI_TTS_VOICE,
-            input=cleaned_text,
+            input=text,
         )
         audio_bytes = response.read()
         return VoiceSynthesisResult(
             provider="openai",
-            language=normalized_language,
+            language=language,
             mime_type=response.content_type or "audio/mpeg",
             audio_base64=base64.b64encode(audio_bytes).decode("utf-8"),
         )
 
     if VOICE_PROVIDER == "bhashini":
-        return _synthesize_with_bhashini(cleaned_text, normalized_language)
+        return _synthesize_with_bhashini(text, language)
 
     raise RuntimeError(f"Unsupported VOICE_PROVIDER: {VOICE_PROVIDER}. Set it to 'openai' or 'bhashini'.")
 
@@ -644,70 +695,9 @@ def _persist_history(summary: ClinicalHistorySummary) -> dict:
 # ---------------------------------------------------------------------------
 
 
-class ApprovedTrainingExample(BaseModel):
-    """A doctor-reviewed learning example that can be stored for future retraining."""
-
-    user_question: str = Field(description="The patient-facing question or transcript clue.")
-    answer: str = Field(description="The clinically appropriate response or note generated by the doctor or model.")
-    language: str = Field(description="Language of the example, e.g. English, Hindi, or Hinglish.")
-    source: str = Field(description="Origin of the example such as patient-intake, doctor-note, or summary.")
-    approved_by_doctor: bool = Field(default=False, description="True only when a doctor explicitly approves the record for retraining.")
-    created_at: Optional[str] = Field(default=None, description="UTC timestamp when this example was created.")
-
-
-def _approved_case_file() -> Path:
-    TRAINING_DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
-    return TRAINING_DATA_PATH
-
-
-def _append_approved_case(record: ApprovedTrainingExample) -> None:
-    path = _approved_case_file()
-    payload = record.model_dump(exclude_none=True)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
-
-
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
-
-
-@app.post("/learning/record-case", response_model=dict)
-async def record_learning_case(example: ApprovedTrainingExample) -> dict:
-    """Store a doctor-approved case for the retraining queue. This is not live autonomous learning from raw patient inputs."""
-    if not example.approved_by_doctor:
-        raise HTTPException(status_code=400, detail="Cases are only accepted for retraining after doctor approval.")
-    example.created_at = example.created_at or uuid.uuid4().hex
-    _append_approved_case(example)
-    return {"status": "stored", "approved": True, "records": 1}
-
-
-@app.get("/learning/approved-cases")
-async def get_approved_cases(limit: int = 20) -> dict:
-    path = _approved_case_file()
-    if not path.exists():
-        return {"cases": [], "count": 0}
-
-    lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
-    items = [json.loads(line) for line in lines[-limit:]]
-    return {"cases": items, "count": len(items)}
-
-
-@app.post("/learning/retrain")
-async def trigger_retraining() -> dict:
-    """Queue a retraining job from doctor-approved examples. This requires an explicit action, not automatic learning on every user input."""
-    path = _approved_case_file()
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="No approved training cases have been recorded yet.")
-    lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
-    approved = [json.loads(line) for line in lines if json.loads(line).get("approved_by_doctor") is True]
-    if not approved:
-        raise HTTPException(status_code=400, detail="No doctor-approved cases are available for retraining.")
-    return {
-        "status": "queued",
-        "approved_case_count": len(approved),
-        "note": "Retraining is manual and doctor-approved; raw patient inputs are not auto-retained without explicit approval.",
-    }
 
 
 @app.post("/voice/transcribe", response_model=VoiceTranscriptionResult)
@@ -734,21 +724,23 @@ async def speak_text(text: str = "", language: str = "en") -> VoiceSynthesisResu
 async def patient_voice_assistant(file: UploadFile = File(...), language: str = "en") -> ConversationalQuestionResponse:
     """Transcribe a spoken patient answer and return the next question to ask."""
     transcription = await _transcribe_voice_upload(file, language)
+    text_for_model, text_language = normalize_multilingual_voice_text(transcription.text, language)
     try:
         from local_bilingual_model import ask
 
-        reply = await asyncio.to_thread(ask, transcription.text)
+        reply = await asyncio.to_thread(ask, text_for_model)
     except (FileNotFoundError, RuntimeError, OSError) as exc:
         logger.exception("Local bilingual model inference failed for voice input.")
         raise HTTPException(status_code=503, detail=f"Local bilingual model unavailable: {exc}") from exc
 
-    lower = transcription.text.lower()
-    hindi = any("\u0900" <= char <= "\u097f" for char in transcription.text)
+    lower = text_for_model.lower()
+    hindi = any("\u0900" <= char <= "\u097f" for char in text_for_model)
     hinglish = any(word in lower for word in ("mere", "pet", "dard", "hai", "hue", "kaise"))
     urgent = any(word in lower for word in ("chest pain", "breathing", "faint", "stroke", "बेहोश", "सीने"))
+    language_name = "Hinglish" if hinglish else ("Hindi" if hindi else "English")
     return ConversationalQuestionResponse(
         reply=reply,
-        language="Hinglish" if hinglish else ("Hindi" if hindi else "English"),
+        language=language_name,
         red_flags_detected=urgent,
     )
 
@@ -757,6 +749,40 @@ async def patient_voice_assistant(file: UploadFile = File(...), language: str = 
 async def doctor_voice_note(file: UploadFile = File(...), language: str = "en") -> VoiceTranscriptionResult:
     """Transcript doctor dictation to text so the physician can review or save notes."""
     return await _transcribe_voice_upload(file, language)
+
+
+@app.post("/patient/profile", response_model=PatientProfile)
+async def save_patient_profile(profile: PatientProfile) -> PatientProfile:
+    """Save or update a patient's long-term allergies and medical profile for future visits."""
+    payload = profile.model_dump()
+    payload["last_updated"] = payload.get("last_updated") or datetime.utcnow().isoformat()
+    stored = _safe_supabase_insert("patient_profiles", payload)
+    if stored:
+        return PatientProfile(**stored)
+    return profile
+
+
+@app.get("/patient/profile/{patient_id}", response_model=PatientProfile)
+async def get_patient_profile(patient_id: str) -> PatientProfile:
+    """Fetch the stored patient profile to avoid asking repeatedly for known allergies or medication issues."""
+    stored = _safe_supabase_select("patient_profiles", "patient_id", patient_id)
+    if stored:
+        return PatientProfile(**stored)
+    raise HTTPException(status_code=404, detail=f"Patient profile not found for {patient_id}.")
+
+
+@app.post("/doctor/approved-case", response_model=ApprovedTrainingCase)
+async def doctor_approved_case(case: ApprovedTrainingCase) -> ApprovedTrainingCase:
+    """Store a doctor-reviewed medical case for a curated learning dataset. This is a review-controlled path, not automatic live training."""
+    payload = case.model_dump()
+    stored = _safe_supabase_insert("doctor_approved_cases", payload)
+    if stored:
+        return ApprovedTrainingCase(**stored)
+    local_path = Path("training/approved_cases.jsonl")
+    local_path.parent.mkdir(parents=True, exist_ok=True)
+    with local_path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    return case
 
 
 @app.post("/ask-clinical-question", response_model=ConversationalQuestionResponse)
