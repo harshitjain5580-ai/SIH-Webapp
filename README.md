@@ -122,7 +122,7 @@ If the team is sharing a single Supabase project, ask whoever created it for the
 claude.md.md          Architecture rules, tech stack, and JSON data contracts
 main.py                FastAPI app and API routes
 local_bilingual_model.py Lazy loader for the local Qwen bilingual adapter
-bilingual_clinical_conversation_questions.xlsx Training question dataset
+bilingual_clinical_conversation_questions.xlsx / trilingual_clinical_conversation_questions.xlsx Training question datasets
 training/               Dataset preparation, training scripts, adapters, and metrics
 supabase_schema.sql     Database schema, storage bucket, and RLS policies
 requirements.txt        Python dependencies
