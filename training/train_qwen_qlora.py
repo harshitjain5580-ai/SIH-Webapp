@@ -98,6 +98,7 @@ def main() -> None:
             per_device_train_batch_size=1,
             gradient_accumulation_steps=8,
             learning_rate=5e-5,
+            use_cpu=device == "cpu",
             bf16=device == "cuda",
             fp16=False,
             logging_steps=1,
