@@ -29,6 +29,7 @@ import tempfile
 import uuid
 from datetime import datetime
 from pathlib import Path
+from threading import Lock
 from typing import List, Optional
 from urllib import request
 
