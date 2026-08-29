@@ -20,11 +20,12 @@ claude.md.md:
 
 import asyncio
 import base64
-import io
 import json
 import logging
 import os
+import re
 import uuid
+from pathlib import Path
 from typing import List, Optional
 from urllib import request
 
@@ -311,6 +312,49 @@ BHASHINI_TTS_URL = os.environ.get("BHASHINI_TTS_URL")
 BHASHINI_USER_ID = os.environ.get("BHASHINI_USER_ID")
 OPENAI_TTS_MODEL = os.environ.get("OPENAI_TTS_MODEL", "gpt-4o-mini-tts")
 OPENAI_TTS_VOICE = os.environ.get("OPENAI_TTS_VOICE", "sage")
+TRAINING_DATA_PATH = Path(os.environ.get("APPROVED_CASES_PATH", "training/approved_cases.jsonl"))
+
+
+def _normalize_language_code(language: str) -> str:
+    value = (language or "en").strip().lower()
+    aliases = {
+        "en": "en",
+        "english": "en",
+        "hi": "hi",
+        "hindi": "hi",
+        "hin": "hi",
+        "hi-in": "hi",
+        "hinglish": "hi",
+        "bn": "bn",
+        "bengali": "bn",
+        "mr": "mr",
+        "marathi": "mr",
+        "ta": "ta",
+        "tamil": "ta",
+    }
+    return aliases.get(value, value)
+
+
+def _preprocess_multilingual_voice_text(text: str, language: str) -> str:
+    if not text:
+        return ""
+    value = text.strip()
+    lang = _normalize_language_code(language)
+    value = re.sub(r"\s+", " ", value)
+    value = value.replace("\u200c", " ")
+    value = value.replace("\u00a0", " ")
+    if lang in {"hi", "bn", "mr", "ta"}:
+        value = value.replace("\u0964", ".")
+        value = value.replace("\u2018", "'").replace("\u2019", "'")
+        value = value.replace("\u201c", '"').replace("\u201d", '"')
+        value = re.sub(r"(?i)\b(kaise|aise|waise|kaisa|aisa|hai|hue|haii|huee)\b", lambda m: m.group(0).lower(), value)
+    if lang == "hi":
+        value = value.replace("mere pet mae dard hae", "mere pet mein dard hai")
+        value = value.replace("mai", "main")
+        value = value.replace("dard hain", "dard hai")
+        value = value.replace("dard h", "dard hai")
+        value = value.replace("mainy", "maine")
+    return value.strip()
 
 
 def _normalize_voice_text(payload: object) -> str:
@@ -410,46 +454,54 @@ async def _transcribe_voice_upload(file: UploadFile, language: str) -> VoiceTran
     if not contents:
         raise HTTPException(status_code=400, detail="Uploaded audio is empty.")
 
+    normalized_language = _normalize_language_code(language)
+
     if VOICE_PROVIDER in ("openai", "default"):
         if AI_API_KEY in (None, "not-set"):
             raise RuntimeError("OPENAI_API_KEY is required to use the OpenAI voice pipeline.")
         transcription = client.audio.transcriptions.create(
             model="gpt-4o-mini-transcribe",
             file=(file.filename or "voice.wav", contents, file.content_type or "audio/wav"),
-            language=language,
+            language=normalized_language,
         )
+        text = _preprocess_multilingual_voice_text((transcription.text or "").strip(), normalized_language)
         return VoiceTranscriptionResult(
-            text=(transcription.text or "").strip(),
+            text=text,
             provider="openai",
-            language=language,
+            language=normalized_language,
             confidence=getattr(transcription, "confidence", None),
         )
 
     if VOICE_PROVIDER == "bhashini":
-        return _transcribe_with_bhashini(contents, language, file.filename or "voice.wav")
+        result = _transcribe_with_bhashini(contents, normalized_language, file.filename or "voice.wav")
+        result.text = _preprocess_multilingual_voice_text(result.text, normalized_language)
+        return result
 
     raise RuntimeError(f"Unsupported VOICE_PROVIDER: {VOICE_PROVIDER}. Set it to 'openai' or 'bhashini'.")
 
 
 async def _synthesize_voice_text(text: str, language: str) -> VoiceSynthesisResult:
+    normalized_language = _normalize_language_code(language)
+    cleaned_text = _preprocess_multilingual_voice_text(text, normalized_language)
+
     if VOICE_PROVIDER in ("openai", "default"):
         if AI_API_KEY in (None, "not-set"):
             raise RuntimeError("OPENAI_API_KEY is required to use the OpenAI voice synthesis pipeline.")
         response = client.audio.speech.create(
             model=OPENAI_TTS_MODEL,
             voice=OPENAI_TTS_VOICE,
-            input=text,
+            input=cleaned_text,
         )
         audio_bytes = response.read()
         return VoiceSynthesisResult(
             provider="openai",
-            language=language,
+            language=normalized_language,
             mime_type=response.content_type or "audio/mpeg",
             audio_base64=base64.b64encode(audio_bytes).decode("utf-8"),
         )
 
     if VOICE_PROVIDER == "bhashini":
-        return _synthesize_with_bhashini(text, language)
+        return _synthesize_with_bhashini(cleaned_text, normalized_language)
 
     raise RuntimeError(f"Unsupported VOICE_PROVIDER: {VOICE_PROVIDER}. Set it to 'openai' or 'bhashini'.")
 
@@ -592,9 +644,70 @@ def _persist_history(summary: ClinicalHistorySummary) -> dict:
 # ---------------------------------------------------------------------------
 
 
+class ApprovedTrainingExample(BaseModel):
+    """A doctor-reviewed learning example that can be stored for future retraining."""
+
+    user_question: str = Field(description="The patient-facing question or transcript clue.")
+    answer: str = Field(description="The clinically appropriate response or note generated by the doctor or model.")
+    language: str = Field(description="Language of the example, e.g. English, Hindi, or Hinglish.")
+    source: str = Field(description="Origin of the example such as patient-intake, doctor-note, or summary.")
+    approved_by_doctor: bool = Field(default=False, description="True only when a doctor explicitly approves the record for retraining.")
+    created_at: Optional[str] = Field(default=None, description="UTC timestamp when this example was created.")
+
+
+def _approved_case_file() -> Path:
+    TRAINING_DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
+    return TRAINING_DATA_PATH
+
+
+def _append_approved_case(record: ApprovedTrainingExample) -> None:
+    path = _approved_case_file()
+    payload = record.model_dump(exclude_none=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
+
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
+
+
+@app.post("/learning/record-case", response_model=dict)
+async def record_learning_case(example: ApprovedTrainingExample) -> dict:
+    """Store a doctor-approved case for the retraining queue. This is not live autonomous learning from raw patient inputs."""
+    if not example.approved_by_doctor:
+        raise HTTPException(status_code=400, detail="Cases are only accepted for retraining after doctor approval.")
+    example.created_at = example.created_at or uuid.uuid4().hex
+    _append_approved_case(example)
+    return {"status": "stored", "approved": True, "records": 1}
+
+
+@app.get("/learning/approved-cases")
+async def get_approved_cases(limit: int = 20) -> dict:
+    path = _approved_case_file()
+    if not path.exists():
+        return {"cases": [], "count": 0}
+
+    lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    items = [json.loads(line) for line in lines[-limit:]]
+    return {"cases": items, "count": len(items)}
+
+
+@app.post("/learning/retrain")
+async def trigger_retraining() -> dict:
+    """Queue a retraining job from doctor-approved examples. This requires an explicit action, not automatic learning on every user input."""
+    path = _approved_case_file()
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="No approved training cases have been recorded yet.")
+    lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    approved = [json.loads(line) for line in lines if json.loads(line).get("approved_by_doctor") is True]
+    if not approved:
+        raise HTTPException(status_code=400, detail="No doctor-approved cases are available for retraining.")
+    return {
+        "status": "queued",
+        "approved_case_count": len(approved),
+        "note": "Retraining is manual and doctor-approved; raw patient inputs are not auto-retained without explicit approval.",
+    }
 
 
 @app.post("/voice/transcribe", response_model=VoiceTranscriptionResult)
