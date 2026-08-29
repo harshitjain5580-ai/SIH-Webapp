@@ -76,6 +76,23 @@ Invoke-RestMethod `
 
 The first local-model request loads Qwen and may take a few seconds. The adapter is trained for question phrasing, not diagnosis, treatment, or clinical decision-making.
 
+## Voice assistant support
+
+The backend includes voice helpers for patient and doctor workflows:
+
+- `POST /voice/transcribe` — upload an audio file and get text transcription
+- `POST /voice/speak` — convert text into spoken audio
+- `POST /voice/patient-assistant` — speak the patient's problem, transcribe it, and return the next question
+- `POST /doctor/voice-note` — transcribe a doctor's voice note or dictation
+
+Use `VOICE_PROVIDER=openai` for OpenAI transcription and TTS, or set `VOICE_PROVIDER=bhashini` with the Bhashini ASR/TTS URLs and API key for Indian-language voice integration.
+
+## Learn how training works
+
+For a beginner-friendly, step-by-step explanation of the dataset, tokenizer,
+fine-tuning, LoRA adapter, training settings, inference flow, and limitations,
+see [`training/README.md`](training/README.md#how-the-model-was-trained-class-10-explanation).
+
 ## Database (Supabase)
 
 The database schema is defined in [`supabase_schema.sql`](supabase_schema.sql):

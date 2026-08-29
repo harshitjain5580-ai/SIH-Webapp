@@ -19,11 +19,14 @@ claude.md.md:
 """
 
 import asyncio
+import base64
+import io
 import json
 import logging
 import os
 import uuid
 from typing import List, Optional
+from urllib import request
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -117,6 +120,24 @@ class ConversationalQuestionResponse(BaseModel):
     red_flags_detected: bool = Field(
         description="True when the patient's message suggests an urgent emergency symptom."
     )
+
+
+class VoiceTranscriptionResult(BaseModel):
+    """Speech-to-text result for patient or doctor dictation."""
+
+    text: str = Field(description="The text recovered from the audio input.")
+    provider: str = Field(description="Speech provider used: openai or bhashini.")
+    language: str = Field(description="Detected or requested language code, e.g. en, hi, or hi-IN.")
+    confidence: Optional[float] = Field(default=None, description="Optional confidence score if the provider provides one.")
+
+
+class VoiceSynthesisResult(BaseModel):
+    """Text-to-speech result containing audio payload."""
+
+    provider: str = Field(description="Voice provider used for synthesis.")
+    language: str = Field(description="Language used for synthesis.")
+    mime_type: str = Field(description="Audio MIME type returned by the provider.")
+    audio_base64: str = Field(description="Base64-encoded audio data for playback in a mobile or web app.")
 
 
 class PatientHistoryRecord(BaseModel):
@@ -283,6 +304,156 @@ else:
 
 client = OpenAI(api_key=AI_API_KEY, base_url=AI_BASE_URL)
 
+VOICE_PROVIDER = os.environ.get("VOICE_PROVIDER", "openai").lower()
+BHASHINI_API_KEY = os.environ.get("BHASHINI_API_KEY")
+BHASHINI_ASR_URL = os.environ.get("BHASHINI_ASR_URL")
+BHASHINI_TTS_URL = os.environ.get("BHASHINI_TTS_URL")
+BHASHINI_USER_ID = os.environ.get("BHASHINI_USER_ID")
+OPENAI_TTS_MODEL = os.environ.get("OPENAI_TTS_MODEL", "gpt-4o-mini-tts")
+OPENAI_TTS_VOICE = os.environ.get("OPENAI_TTS_VOICE", "sage")
+
+
+def _normalize_voice_text(payload: object) -> str:
+    if isinstance(payload, str):
+        return payload.strip()
+    if isinstance(payload, dict):
+        for key in ("text", "transcript", "output_text", "final", "result"):
+            if key in payload and isinstance(payload[key], str):
+                return payload[key].strip()
+        if "output" in payload:
+            nested = _normalize_voice_text(payload["output"])
+            if nested:
+                return nested
+        if "data" in payload:
+            nested = _normalize_voice_text(payload["data"])
+            if nested:
+                return nested
+        if "result" in payload and isinstance(payload["result"], dict):
+            return _normalize_voice_text(payload["result"])
+    if isinstance(payload, list):
+        parts = [_normalize_voice_text(item) for item in payload]
+        text = " ".join(part for part in parts if part)
+        if text:
+            return text
+    return ""
+
+
+def _transcribe_with_bhashini(audio_bytes: bytes, language: str, filename: str) -> VoiceTranscriptionResult:
+    if not BHASHINI_ASR_URL:
+        raise RuntimeError("VOICE_PROVIDER=bhashini requires BHASHINI_ASR_URL to be set in the environment.")
+    if not BHASHINI_API_KEY:
+        raise RuntimeError("VOICE_PROVIDER=bhashini requires BHASHINI_API_KEY to be set in the environment.")
+
+    payload = {
+        "language": language,
+        "task": "asr",
+        "audio_b64": base64.b64encode(audio_bytes).decode("utf-8"),
+        "filename": filename,
+    }
+    req = request.Request(
+        BHASHINI_ASR_URL,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {BHASHINI_API_KEY}",
+            **({"x-user-id": BHASHINI_USER_ID} if BHASHINI_USER_ID else {}),
+        },
+        method="POST",
+    )
+    with request.urlopen(req, timeout=60) as response:
+        body = response.read()
+    try:
+        parsed = json.loads(body.decode("utf-8"))
+    except Exception:
+        parsed = {"text": body.decode("utf-8", errors="ignore")}
+    text = _normalize_voice_text(parsed)
+    if not text:
+        raise RuntimeError("Bhashini ASR returned no transcription text.")
+    return VoiceTranscriptionResult(text=text, provider="bhashini", language=language)
+
+
+def _synthesize_with_bhashini(text: str, language: str) -> VoiceSynthesisResult:
+    if not BHASHINI_TTS_URL:
+        raise RuntimeError("VOICE_PROVIDER=bhashini requires BHASHINI_TTS_URL to be set in the environment.")
+    if not BHASHINI_API_KEY:
+        raise RuntimeError("VOICE_PROVIDER=bhashini requires BHASHINI_API_KEY to be set in the environment.")
+
+    payload = {
+        "text": text,
+        "language": language,
+        "gender": "female",
+    }
+    req = request.Request(
+        BHASHINI_TTS_URL,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {BHASHINI_API_KEY}",
+            **({"x-user-id": BHASHINI_USER_ID} if BHASHINI_USER_ID else {}),
+        },
+        method="POST",
+    )
+    with request.urlopen(req, timeout=60) as response:
+        body = response.read()
+    if isinstance(body, bytes):
+        return VoiceSynthesisResult(
+            provider="bhashini",
+            language=language,
+            mime_type="audio/mpeg",
+            audio_base64=base64.b64encode(body).decode("utf-8"),
+        )
+    raise RuntimeError("Bhashini TTS response was not binary audio data.")
+
+
+async def _transcribe_voice_upload(file: UploadFile, language: str) -> VoiceTranscriptionResult:
+    contents = await file.read()
+    if not contents:
+        raise HTTPException(status_code=400, detail="Uploaded audio is empty.")
+
+    if VOICE_PROVIDER in ("openai", "default"):
+        if AI_API_KEY in (None, "not-set"):
+            raise RuntimeError("OPENAI_API_KEY is required to use the OpenAI voice pipeline.")
+        transcription = client.audio.transcriptions.create(
+            model="gpt-4o-mini-transcribe",
+            file=(file.filename or "voice.wav", contents, file.content_type or "audio/wav"),
+            language=language,
+        )
+        return VoiceTranscriptionResult(
+            text=(transcription.text or "").strip(),
+            provider="openai",
+            language=language,
+            confidence=getattr(transcription, "confidence", None),
+        )
+
+    if VOICE_PROVIDER == "bhashini":
+        return _transcribe_with_bhashini(contents, language, file.filename or "voice.wav")
+
+    raise RuntimeError(f"Unsupported VOICE_PROVIDER: {VOICE_PROVIDER}. Set it to 'openai' or 'bhashini'.")
+
+
+async def _synthesize_voice_text(text: str, language: str) -> VoiceSynthesisResult:
+    if VOICE_PROVIDER in ("openai", "default"):
+        if AI_API_KEY in (None, "not-set"):
+            raise RuntimeError("OPENAI_API_KEY is required to use the OpenAI voice synthesis pipeline.")
+        response = client.audio.speech.create(
+            model=OPENAI_TTS_MODEL,
+            voice=OPENAI_TTS_VOICE,
+            input=text,
+        )
+        audio_bytes = response.read()
+        return VoiceSynthesisResult(
+            provider="openai",
+            language=language,
+            mime_type=response.content_type or "audio/mpeg",
+            audio_base64=base64.b64encode(audio_bytes).decode("utf-8"),
+        )
+
+    if VOICE_PROVIDER == "bhashini":
+        return _synthesize_with_bhashini(text, language)
+
+    raise RuntimeError(f"Unsupported VOICE_PROVIDER: {VOICE_PROVIDER}. Set it to 'openai' or 'bhashini'.")
+
+
 # Same fallback pattern for Supabase: allow the app to start before
 # SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are configured; real DB/Storage
 # calls will fail with a clear 502 until valid credentials are set in the
@@ -424,6 +595,55 @@ def _persist_history(summary: ClinicalHistorySummary) -> dict:
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
+
+
+@app.post("/voice/transcribe", response_model=VoiceTranscriptionResult)
+async def transcribe_voice(file: UploadFile = File(...), language: str = "en") -> VoiceTranscriptionResult:
+    """Convert spoken audio into text for patient intake or doctor dictation."""
+    try:
+        return await _transcribe_voice_upload(file, language)
+    except (RuntimeError, ValueError, OSError) as exc:
+        raise HTTPException(status_code=502, detail=f"Voice transcription failed: {exc}") from exc
+
+
+@app.post("/voice/speak", response_model=VoiceSynthesisResult)
+async def speak_text(text: str = "", language: str = "en") -> VoiceSynthesisResult:
+    """Convert text back into audio for a patient or doctor-facing voice assistant."""
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="Text to speak cannot be empty.")
+    try:
+        return await _synthesize_voice_text(text, language)
+    except (RuntimeError, ValueError, OSError) as exc:
+        raise HTTPException(status_code=502, detail=f"Voice synthesis failed: {exc}") from exc
+
+
+@app.post("/voice/patient-assistant", response_model=ConversationalQuestionResponse)
+async def patient_voice_assistant(file: UploadFile = File(...), language: str = "en") -> ConversationalQuestionResponse:
+    """Transcribe a spoken patient answer and return the next question to ask."""
+    transcription = await _transcribe_voice_upload(file, language)
+    try:
+        from local_bilingual_model import ask
+
+        reply = await asyncio.to_thread(ask, transcription.text)
+    except (FileNotFoundError, RuntimeError, OSError) as exc:
+        logger.exception("Local bilingual model inference failed for voice input.")
+        raise HTTPException(status_code=503, detail=f"Local bilingual model unavailable: {exc}") from exc
+
+    lower = transcription.text.lower()
+    hindi = any("\u0900" <= char <= "\u097f" for char in transcription.text)
+    hinglish = any(word in lower for word in ("mere", "pet", "dard", "hai", "hue", "kaise"))
+    urgent = any(word in lower for word in ("chest pain", "breathing", "faint", "stroke", "बेहोश", "सीने"))
+    return ConversationalQuestionResponse(
+        reply=reply,
+        language="Hinglish" if hinglish else ("Hindi" if hindi else "English"),
+        red_flags_detected=urgent,
+    )
+
+
+@app.post("/doctor/voice-note", response_model=VoiceTranscriptionResult)
+async def doctor_voice_note(file: UploadFile = File(...), language: str = "en") -> VoiceTranscriptionResult:
+    """Transcript doctor dictation to text so the physician can review or save notes."""
+    return await _transcribe_voice_upload(file, language)
 
 
 @app.post("/ask-clinical-question", response_model=ConversationalQuestionResponse)
