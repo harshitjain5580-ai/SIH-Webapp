@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MediKiosk Intake</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="shell">
+    <h1>MediKiosk</h1>
+    <p class="muted">Patient history intake connected to the FastAPI AI backend.</p>
+
+    <section class="card">
+      <label>Backend URL
+        <input id="api-url" value="http://127.0.0.1:8000">
+      </label>
+      <label>Patient ID
+        <input id="patient-id" placeholder="P-101">
+      </label>
+      <button id="login">Start session</button>
+      <p id="session-status" class="status"></p>
+    </section>
+
+    <section class="card">
+      <h2>Conversation</h2>
+      <div id="conversation" class="conversation" aria-live="polite"></div>
+      <textarea id="message" rows="3" placeholder="Type the patient's answer"></textarea>
+      <div class="actions">
+        <button id="send">Ask next question</button>
+        <button id="summary" class="secondary">Generate summary</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Medical document</h2>
+      <input id="document" type="file" accept="image/*,.pdf">
+      <button id="upload" class="secondary">Upload document</button>
+      <pre id="document-result" class="result"></pre>
+    </section>
+
+    <section class="card">
+      <h2>Summary</h2>
+      <pre id="summary-result" class="result"></pre>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

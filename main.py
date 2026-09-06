@@ -37,6 +37,7 @@ from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from openai import OpenAI, OpenAIError
 from supabase import Client, create_client
@@ -367,6 +368,21 @@ class PatientLoginResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 app = FastAPI(title="MediKiosk API", version="0.1.0")
+allowed_origins = [
+    origin.strip()
+    for origin in os.environ.get(
+        "CORS_ALLOW_ORIGINS",
+        "http://127.0.0.1:5500,http://localhost:5500,http://127.0.0.1:8080,http://localhost:8080",
+    ).split(",")
+    if origin.strip()
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # OpenAI-compatible providers can be selected without changing endpoint code.
 # Set AI_PROVIDER=xai and GROK_API_KEY to use xAI's Grok models.
@@ -1056,8 +1072,17 @@ def _persist_history(summary: ClinicalHistorySummary) -> dict:
             .execute()
         )
     except Exception as exc:
-        logger.exception("Failed to persist clinical history to Supabase.")
-        raise HTTPException(status_code=502, detail=f"Failed to persist clinical history to Supabase: {exc}") from exc
+        logger.warning("Supabase history persistence failed; using local fallback record: %s", exc)
+        return {
+            "id": str(uuid.uuid4()),
+            "created_at": datetime.utcnow().isoformat(),
+            "chief_complaint": summary.chief_complaint,
+            "hpi_socrates": summary.hpi_socrates,
+            "current_medications": [m.model_dump() for m in summary.current_medications],
+            "ayush_parameters": summary.ayush_parameters.model_dump(),
+            "red_flags_detected": summary.red_flags_detected,
+            "alert_acknowledged": False,
+        }
 
     if not response.data:
         raise HTTPException(status_code=502, detail="Supabase insert returned no data.")

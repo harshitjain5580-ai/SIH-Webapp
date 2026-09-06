@@ -70,6 +70,14 @@ the local AI models run on the backend machine.
    ```
    API docs available at `http://127.0.0.1:8000/docs`.
 
+7. **Run the connected frontend (optional)**
+   In a second PowerShell window:
+   ```powershell
+   python -m http.server 5500 --directory frontend
+   ```
+   Open `http://127.0.0.1:5500`. The page calls the FastAPI backend directly;
+   change the Backend URL field when the API runs on another machine or port.
+
    The AI provider defaults to OpenAI. To use Grok for the existing extraction
    endpoints, set `AI_PROVIDER=xai`,
    `GROK_API_KEY`, and optionally `AI_MODEL` (for example,

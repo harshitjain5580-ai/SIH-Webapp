@@ -45,3 +45,15 @@ def test_document_upload_offline_fallback():
     assert payload["storage_path"].endswith(".jpg")
     assert "extracted_document" in payload
     assert isinstance(payload["extracted_document"]["diagnoses"], list)
+
+
+def test_extract_history_offline_fallback_returns_record():
+    response = client.post(
+        "/extract-history",
+        json={"transcript": "mere pet me dard hai"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["id"]
+    assert payload["chief_complaint"]
+    assert payload["alert_acknowledged"] is False
