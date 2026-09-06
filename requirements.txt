@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+pydantic
+openai
+supabase
+python-multipart
+python-dotenv
+faster-whisper
+pyttsx3

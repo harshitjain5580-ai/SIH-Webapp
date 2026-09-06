@@ -1,0 +1,19 @@
+venv/
+__pycache__/
+*.pyc
+.env
+
+# Runtime medical records and uploaded documents (may contain PHI)
+data/local_db.json
+uploads/
+
+# Generated datasets, checkpoints, and model artifacts
+training/dataset/
+training/outputs/
+training/approved_cases.jsonl
+
+# Local clinical-question datasets
+*_clinical_conversation_questions.xlsx
+
+# Local assistant configuration
+.claude/
