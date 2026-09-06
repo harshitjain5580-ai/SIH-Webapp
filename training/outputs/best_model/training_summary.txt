@@ -1,0 +1,2 @@
+Completed deterministic one-pass fit on 81 training examples.
+This retrieval baseline has no neural epochs, learning rate, or GPU memory usage.

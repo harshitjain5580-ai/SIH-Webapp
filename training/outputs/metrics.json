@@ -1,0 +1,125 @@
+{
+  "validation": {
+    "examples": 10,
+    "character_error_rate": 0.8129052936994638,
+    "word_error_rate": 4.8104437975495475,
+    "exact_match": 0.0
+  },
+  "test": {
+    "examples": 11,
+    "character_error_rate": 0.7826027405924045,
+    "word_error_rate": 4.731377848680209,
+    "exact_match": 0.0
+  },
+  "predictions": {
+    "validation": [
+      {
+        "image": "C:\\Users\\LENOVO\\.cache\\kagglehub\\datasets\\codinganirbanb\\doctor-prescription-labelled-dataset\\versions\\1\\prepared_image_data\\72\\72.jpg",
+        "prediction": "2 1344 DIR RAHUL THAKUR AMBAS, OCH DCH Lond INIBUS MIAP 02. Monong (2009 - 8 pe gome pte Te Frisur(e) 10 Faces Available IMMUNISATION DAY CARE UNIT NEURD DEVELOPMENTAL WING LAB TESTS 2.5~25.",
+        "ground_truth": "\u09a1\u09be\u0983 \u098f\u09b8\u0995\u09c7. \u098f\u09ae. \u099c\u09df\u09a8\u09be\u09b2 \u0986\u09ac\u09c7\u09a6\u09c0\u09a8\n\u098f\u09ae.\u09ac\u09bf.\u09ac\u09bf.\u098f\u09b8; \u09a1\u09bf \u0985\u09b0\u09cd\u09a5\u09cb (\u09a1\u09bf.\u0987\u0989)\n\u098f\u09ab.\u0993.\u098f\u09b8 (\u098f\u09a8.\u0987\u0989.\u098f\u0987\u099a, \u09b8\u09bf\u0999\u09cd\u0997\u09be\u09aa\u09c1\u09b0)\n\u09aa\u09cd\u09b0\u09be\u0995\u09cd\u09a4\u09a8 \u0985\u09b0\u09cd\u09a5\u09cb\u09aa\u09c7\u09a1\u09bf\u0995 \u09b8\u09be\u09b0\u09cd\u099c\u09a8: \u099c\u09be\u09a4\u09c0\u09df \u09aa\u0999\u09cd\u0997\u09c1 \u0993 \u09aa\u09c1\u09a8\u09b0\u09cd\u09ac\u09be\u09b8\u09a8 \u09b9\u09be\u09b8\u09aa\u09be\u09a4\u09be\u09b2\n\u098f\u09ac\u0982 \u098f\u09ae\u0993\u098f\u0987\u099a, \u09b8\u09cc\u09a6\u09bf \u0986\u09b0\u09ac\n\u09b8\u09bf\u09a8\u09bf\u09df\u09b0 \u0995\u09a8\u09b8\u09be\u09b2\u099f\u09c7\u09a8\u09cd\u099f \u0985\u09b0\u09cd\u09a5\u09cb\u09aa\u09c7\u09a1\u09bf\u0995 \u09b8\u09be\u09b0\u09cd\u099c\u09a8\n\u09aa\u09cd\u09b0\u09bf\u09a8\u09cd\u09b8\u09bf\u09aa\u09be\u09b2: \u099f\u09cd\u09b0\u09ae\u09be \u0987\u09a8\u09b7\u09cd\u099f\u09bf\u099f\u09bf\u0989\u099f \u0985\u09ac \u09ae\u09c7\u09a1\u09bf\u0995\u09c7\u09b2 \u099f\u09c7\u0995\u09a8\u09cb\u09b2\u099c\u09bf\n\u09a8\u09be\u09ae\u0983 Zahidul Hashan. \u09ac\u09df\u09b8\u0983 \u09ea\u09ea \u09a4\u09be\u09b0\u09bf\u0996: 18/1/10\nRx c/o Pain Rt knee - 1 month\ndifficulty in going up by stair\nNo bony lesion\nAd: xray\nRt Knee. AP, Lat, Axial, Tunnel w\nRx: (1) Tab. Ultrafen plus 50 mg 2+0+2 (\u0986\u09b9\u09be\u09b0\u09c7\u09b0 \u09aa\u09b0)\n(2) Tab. Relentus 0+0+1\n(3) Cap. Pregnil 200 mg 2+0+2 (\u0986\u09b9\u09be\u09b0\u09c7\u09b0 \u0986\u0997\u09c7)\n(4) Tab. Ultracal-D 0+2+0\n(5) Tab. Castilex- 2+0+2\n11/12/10\nAd: MRI Rt Knee\nRx: (1) Knee Cap Rt\n(2) physio + swd + Exercise Rt Knee\nRx: Tab. Diclofenac 50 mg 2+0+2 (\u0986\u09b9\u09be\u09b0\u09c7\u09b0 \u09aa\u09b0)\nTab. Ultracal-D - 0+2+0 (10 days)\nCap. Omeproz 2+0+1\n\u099a\u09c7\u09ae\u09cd\u09ac\u09be\u09b0: \u099f\u09cd\u09b0\u09ae\u09be \u09b8\u09c7\u09a8\u09cd\u099f\u09be\u09b0\n\u09e8\u09e8/\u09ee/ \u098f \u09ac\u09cd\u09b2\u0995-\u09ac\u09bf (\u09b6\u09bf\u09b6\u09c1 \u09ae\u09c7\u09b2\u09be\u09b0 \u09ac\u09bf\u09aa\u09b0\u09c0\u09a4\u09c7)\n\u09b6\u09cd\u09af\u09be\u09ae\u09b2\u09c0, \u09ae\u09bf\u09b0\u09aa\u09c1\u09b0 \u09b0\u09cb\u09a1, \u09a2\u09be\u0995\u09be\n\u09ab\u09cb\u09a8: \u09ee\u09e7\u09e7\u09ec\u09ef\u09ec\u09ef, \u09ee\u09e7\u09e9\u09e6\u09eb\u09e6\u09ee, \u09ef\u09e7\u09e7\u09e7\u09e6\u09e9\u09ee, \u09ef\u09e7\u09ea\u09ec\u09eb\u09e7\u09ea, \u09ef\u09e7\u09ea\u09ec\u09eb\u09ed\u09ec, \u09ef\u09e7\u09ea\u09ec\u09eb\u09ee\u09e9\n\u09ab\u09cd\u09af\u09be\u0995\u09cd\u09b8: \u09ee\u09ee\u09e6-\u09e8-\u09ee\u09e7\u09e7\u09ea\u09e9\u09ee\u09ee\n\u09b8\u09be\u0995\u09cd\u09b7\u09be\u09a4\u09c7\u09b0 \u09b8\u09ae\u09df: \u09b8\u0995\u09be\u09b2 \u09ef\u099f\u09be-\u09ac\u09bf\u0995\u09be\u09b2 \u09e9\u099f\u09be \u09aa\u09b0\u09cd\u09af\u09a8\u09cd\u09a4 (\u09b6\u09c1\u0995\u09cd\u09b0\u09ac\u09be\u09b0 \u09ac\u09a8\u09cd\u09a7), \u09ae\u09cb\u09ac\u09be\u0987\u09b2: \u09e6\u09e7\u09ed\u09e7\u09eb-\u09ea\u09ef\u09e8\u09e7\u09ee\u09eb, \u09e6\u09e7\u09ed\u09e8\u09e8-\u09e7\u09ee\u09e7\u09ee\u09ec\u09e7\u09ef\n\u09aa\u09b0\u09ac\u09b0\u09cd\u09a4\u09c0 \u09b8\u09be\u0995\u09cd\u09b7\u09be\u09a4\u09c7 \u09ac\u09cd\u09af\u09ac\u09b8\u09cd\u09a5\u09be\u09aa\u09a4\u09cd\u09b0 \u09b8\u0999\u09cd\u0997\u09c7 \u0986\u09a8\u09ac\u09c7\u09a8\u0964"
+      },
+      {
+        "image": "C:\\Users\\LENOVO\\.cache\\kagglehub\\datasets\\codinganirbanb\\doctor-prescription-labelled-dataset\\versions\\1\\prepared_image_data\\55\\55.jpg",
+        "prediction": "2 1344 DIR RAHUL THAKUR AMBAS, OCH DCH Lond INIBUS MIAP 02. Monong (2009 - 8 pe gome pte Te Frisur(e) 10 Faces Available IMMUNISATION DAY CARE UNIT NEURD DEVELOPMENTAL WING LAB TESTS 2.5~25.",
+        "ground_truth": "CAKE OUTPATIENT Eammoped 12% & PLC. Date Name of Consultant 15/3 DL KAR dilates left tead c small PSS needs further evaluation May pre U Anjo To Act LAT at present Continue nebulisation Syp Ambrodil-S 4ml BD. * 7 day Periar after 2 week, NASOCLEAR NASAL drops OID Do not put drops, oil or any other liquid in the ear without the doctor's advice 111117. 65 LC2 (Levocetirizine) 1/2 tab 5mg"
+      },
+      {
+        "image": "C:\\Users\\LENOVO\\.cache\\kagglehub\\datasets\\codinganirbanb\\doctor-prescription-labelled-dataset\\versions\\1\\prepared_image_data\\127\\127.jpg",
+        "prediction": "28/08/19\nHb-9.8g/dl\nTLC: 23000\nESR-25\nPCV\u2193MCV\u2193MCH\u2193MCHC\u2193\nt/c: 8.3:1\nTyphidat IgM-Neg\n989974\n\u211e\n\u2192 Syr. Cefelac (5ml/100mg)\n3ml BD x 7 days\n\u2192 Syr. RB Tone Kid (5ml/80mg)\n2.5ml OD x 2 months\n\u2192 Syr. wikoryl\n3ml x 3 days",
+        "ground_truth": "ARLINGTON ONCOLOGY CENTER Social Sec. No. 8343939 2322 West Rogers Road - Baltimore, MD 21209 - Phone: (443) 872-6139 - Fax: (443) 872-6140 NAME: Garrison, Cassandra AGE: ADDRESS: Date: 11-11-03 Rx Oxycontin 80 mg # 90 1 tab PO TID prn (severe pain) REFILL: 0 TIMES DO NOT LABEL Physician Signature: Robert [Konn] DEA No: BK3646556"
+      },
+      {
+        "image": "C:\\Users\\LENOVO\\.cache\\kagglehub\\datasets\\codinganirbanb\\doctor-prescription-labelled-dataset\\versions\\1\\prepared_image_data\\125\\125.jpg",
+        "prediction": "Dr. R.Keshwani MBBS, PGDHS (Diabetology) General Physician and Diabetologist Consultant Diabetologist: Sunshine Hospital, Pace Hospital, Dr. Agarwal's Eye Hospital, Secunderabad Womens Hospital. Ex. Resident Care Hospital. R Ms. Prathna Date: 15-03-17. Acute GE c Dehydration. 1. TAB OFLAZEST OZ - 6, 1 --- 1. 2. TAB AZENAC-MR - 6, 1 --- 1. 3. TAB ANDIAL - 5, 2 - 6hr - 1 - 6hr - 1 - 6hr - 1. 4. TAB ZOFER MD-4 - 6, 1 --- 1. 3 days. Mobile No: 98490 30913, Clinic: 9700807556, drrkeshwani@gmail.com. Family Health Centre, Secunderabad-500 003. A.P., INDIA.",
+        "ground_truth": "Mob.: 9899874855 Dr. Talat Aziz M.B.B.S. (Delhi) CLINIC: 1430, Qasimjan Street, Ballimaran, Delhi-110006 Tel.: 23928493 e-mail: azizclinic@hotmail.com Ref. No. Date: 18-8-18 Medical Certificate This is to certify that Ms Sheeba Malik, whose signature is given below is a follow-up case of Sciatica with Prolapse disc and is under my care. I advise her complete bed rest for 3 months i.e. from 18-8-18 to 18-11-18 Sheeba (Signature) Dr. TALAT AZIZ M.B.B.S. Regd. No. MCI 4809 1430, Qasimjan St. Ballimaran Delhi-6 FACILITIES: VACCINATION NEBULISER LAB COLLECTION CENTER EAR & NOSE PIERCING Resi: N-303, TAJ ENCLAVE, Geeta colony, Delhi-110031."
+      },
+      {
+        "image": "C:\\Users\\LENOVO\\.cache\\kagglehub\\datasets\\codinganirbanb\\doctor-prescription-labelled-dataset\\versions\\1\\prepared_image_data\\87\\87.jpg",
+        "prediction": "CARE OUTPATIENT Date 11/5/21 Name of Consultant S/B Dr. [...] CT Temporal bone Erosion lat. SCC Retracted TM Sclerosed Mastoid Ossicle intact PTA Impedance RT CSOM c c Cholesteatoma",
+        "ground_truth": "RBC Meth: Cytor MCV MCH MCH RDW HCT MP Pancreas: Spleen: Right kidney: 9x2.4cm B/L kidney's in size, raised echogenicity LOST Left kidney 9.1x2.9cm demos no renal calculi RE>>LE Urinary Bladder: Partially distended Prostate grossly IMPRESSION: B/L Medical renal disease Grade II HOW two cysts in largest 10.6x7.7 in the lower pole Dr. G. Harsha G JRIRD Please correlate clinically.. rt Ready on 25/03/2021 - 19:51:29."
+      },
+      {
+        "image": "C:\\Users\\LENOVO\\.cache\\kagglehub\\datasets\\codinganirbanb\\doctor-prescription-labelled-dataset\\versions\\1\\prepared_image_data\\97\\97.jpg",
+        "prediction": "2 1344 DIR RAHUL THAKUR AMBAS, OCH DCH Lond INIBUS MIAP 02. Monong (2009 - 8 pe gome pte Te Frisur(e) 10 Faces Available IMMUNISATION DAY CARE UNIT NEURD DEVELOPMENTAL WING LAB TESTS 2.5~25.",
+        "ground_truth": "RIVERSIDE MEDICAL CENTRE 824 14th Street New York, NY 91743, USA NAME John Smith AGE 34 ADDRESS 162 Example St, NY DATE 09-11-12 Rx Betaloc 100mg - 1 tab BID Dorzolamidum 10 mg - 1 tab BID Cimetidine 50 mg - 2 tabs TID Oxprelol 50mg - 1 tab QD Dr. Steve Johnson signature LABEL REFILL 0 1 2 3 4 5 PRN"
+      },
+      {
+        "image": "C:\\Users\\LENOVO\\.cache\\kagglehub\\datasets\\codinganirbanb\\doctor-prescription-labelled-dataset\\versions\\1\\prepared_image_data\\102\\102.jpg",
+        "prediction": "2 1344 DIR RAHUL THAKUR AMBAS, OCH DCH Lond INIBUS MIAP 02. Monong (2009 - 8 pe gome pte Te Frisur(e) 10 Faces Available IMMUNISATION DAY CARE UNIT NEURD DEVELOPMENTAL WING LAB TESTS 2.5~25.",
+        "ground_truth": "Menses: Very light. \u03d5 meds Last PAP ~ 1 yr ago O/E Slim rod P.V.: no IUD string seen IUD hook used \u03d5 IUD Plan: Ultrasound to check position of IUD RTC after USS \u00b1 D&C for removal"
+      },
+      {
+        "image": "C:\\Users\\LENOVO\\.cache\\kagglehub\\datasets\\codinganirbanb\\doctor-prescription-labelled-dataset\\versions\\1\\prepared_image_data\\40\\40.jpg",
+        "prediction": "AIG HOSPITALS NABH Mindspace Road, Gachibowli, Hyderabad, Telangana-500032, Tel: +91 40 4244-4222. info@aighospitals.com | www.aighospitals.co MDS. Ratna Harisri 58/F UHD-2000243847 Dr. Srinivas Kisha AG hospital Inj Ambisome 50mg - 120 (Inj: Amphotericin) Dr. Saukeerth 5117 (DMO) 15-5-21 math",
+        "ground_truth": "ugiiaki Kishan igukugu MD DNE (Int; 'Aedicing \u20acMC Vellore} YASHODA Consultant Physicen & Dibebolonix HOSPITALS No; 79602 Mobile; 770293264 Email drharikishangmall cot 3 | 812 RAama clawdn (lo 60 L CuiculG Ly (ay\" Au( htoZceicn) A\u20ac ( ( Cofom Anq(fom \u20ac S 0 {A6 } 3ou ~( (u ( & G40 oJ (X7joy Dr: HARI KISHAN BOORUGU CONSULTANT PHYSICIRADNB Regd No; 79692 MASHODA HOSPITALS Somajiguda, Hyderabad-500 082 TALS; SOMAJIGUDA FoR EMERGENCYIQUERIES FOR APPOINTMENTS Sorajiguda; Hyderabad; Telangana 500 082 040 6723 2321(24 HRS) 040 4567 4567 (24 HRS athodamalcom wwyashodahospilals com RegE Ostofo\""
+      },
+      {
+        "image": "C:\\Users\\LENOVO\\.cache\\kagglehub\\datasets\\codinganirbanb\\doctor-prescription-labelled-dataset\\versions\\1\\prepared_image_data\\67\\67.jpg",
+        "prediction": "P. D. HINDUJA HOSPITAL & MEDICAL RESEARCH CENTRE Veer Savarkar Marg, Mahim, Mumbai-400 016 www.hindujahospital.com Name Rahul 29 m Rx T. Azee 500mg 1-0-0 x 7 days Syp Tusq 1 tsp 1-1-1 T. Pan 40mg 1-0-0 x 7 days T. Dolo 650 sos for fever / pain f/w in med OPD sus & reports oral fluids Code No.: 0457/OP-IP/2009 Care@Home doorstep services include: laboratory sample collection, nursing care, physiotherapy & doctor's.",
+        "ground_truth": "SAI CLINIC Near Ambedkar Staue, Miyapur Hyderabad Dr. Y. Lavanya MBBS Regd No.: 96510 Dr. K. Chanakya Chandra Kumar MBBS Regd No.: 68237 Name: Tet Date: 17/Oct 2022 Age/Gender: 30 yo /Mol Phone No. Address: K/c/o - Hypertension & Hypothyroid c/o - Fever since 3 days BP - 140/90 PR - 80 bpm Rx 1) Tab. Stamlo 5mg - 30 day 2) Tab. Arvast 5mg - 30 day 3) Tab. Thyrox 75mcg - 30 days 4) Tab Byplex fort - 30 days Investigations: CRP, CUE, ECG, 2D Echo, Thyroid profile, Bl. urea, Sr. Creatine, Dengue Igm/Igg N"
+      },
+      {
+        "image": "C:\\Users\\LENOVO\\.cache\\kagglehub\\datasets\\codinganirbanb\\doctor-prescription-labelled-dataset\\versions\\1\\prepared_image_data\\109\\109.jpg",
+        "prediction": "28/08/19\nHb-9.8g/dl\nTLC: 23000\nESR-25\nPCV\u2193MCV\u2193MCH\u2193MCHC\u2193\nt/c: 8.3:1\nTyphidat IgM-Neg\n989974\n\u211e\n\u2192 Syr. Cefelac (5ml/100mg)\n3ml BD x 7 days\n\u2192 Syr. RB Tone Kid (5ml/80mg)\n2.5ml OD x 2 months\n\u2192 Syr. wikoryl\n3ml x 3 days",
+        "ground_truth": "Medicine STALEVO 125/31.25/200 Dose 1 Route PO Start date 17/01/17 Frequency X5 Signature Meawe Bleep 1234 GMC No. 1234567 Indication & Additional Instructions LEVODOPA CARBIDOPA ENTACAPONE Medicines Reconciliation (circle) No change 06:00 10:00 14:00 22:00"
+      }
+    ],
+    "test": [
+      {
+        "image": "C:\\Users\\LENOVO\\.cache\\kagglehub\\datasets\\codinganirbanb\\doctor-prescription-labelled-dataset\\versions\\1\\prepared_image_data\\6\\6.jpg",
+        "prediction": "2 1344 DIR RAHUL THAKUR AMBAS, OCH DCH Lond INIBUS MIAP 02. Monong (2009 - 8 pe gome pte Te Frisur(e) 10 Faces Available IMMUNISATION DAY CARE UNIT NEURD DEVELOPMENTAL WING LAB TESTS 2.5~25.",
+        "ground_truth": "Primus Super Speciality Hospital. LIFE HOPE CARE. 2, Chandragupta Marg, Chanakyapuri, New Delhi - 110021. Name - Manmohan. Age/Sex - 55y/M. c/o Covid Pneumonia. UHID - 307301 / 82143. Inj Remdesivir 200mg IV stat. 100mg IV OD X 4 days. (Total - 6 vials). Dr. Abhishek, RMO COVID Ward."
+      },
+      {
+        "image": "C:\\Users\\LENOVO\\.cache\\kagglehub\\datasets\\codinganirbanb\\doctor-prescription-labelled-dataset\\versions\\1\\prepared_image_data\\82\\82.jpg",
+        "prediction": "2 1344 DIR RAHUL THAKUR AMBAS, OCH DCH Lond INIBUS MIAP 02. Monong (2009 - 8 pe gome pte Te Frisur(e) 10 Faces Available IMMUNISATION DAY CARE UNIT NEURD DEVELOPMENTAL WING LAB TESTS 2.5~25.",
+        "ground_truth": "Baby 20/Sept Height: 54 cm Weight: 4.4 kg BMI: H.C-39(m Pulse: Resp: Waist Circum: B.P: General Examination/Allergies History Clinical Diagnosis & Management Plan Otitis media 1 Candibiotic ear drops x3 1-1-10 on (1 drop 3 times) 2 Tanim 0 drops 4 dmps 0.4ml -0.4ml 3 times 2 times 3 Nasoclear nasal drops 1-1-0 (sos) Bonnisan dxps 0.5ml"
+      },
+      {
+        "image": "C:\\Users\\LENOVO\\.cache\\kagglehub\\datasets\\codinganirbanb\\doctor-prescription-labelled-dataset\\versions\\1\\prepared_image_data\\110\\110.jpg",
+        "prediction": "2 1344 DIR RAHUL THAKUR AMBAS, OCH DCH Lond INIBUS MIAP 02. Monong (2009 - 8 pe gome pte Te Frisur(e) 10 Faces Available IMMUNISATION DAY CARE UNIT NEURD DEVELOPMENTAL WING LAB TESTS 2.5~25.",
+        "ground_truth": "Had: Leep May/12 for LSIL last 2 PAP'S July/13, Dec/13 -> Normal O/E Slim PAP deferred - will need PAP q 1yr. c Hx A anovulatory cycles P Endocrine screen RTC 3 wks"
+      },
+      {
+        "image": "C:\\Users\\LENOVO\\.cache\\kagglehub\\datasets\\codinganirbanb\\doctor-prescription-labelled-dataset\\versions\\1\\prepared_image_data\\114\\114.jpg",
+        "prediction": "2 1344 DIR RAHUL THAKUR AMBAS, OCH DCH Lond INIBUS MIAP 02. Monong (2009 - 8 pe gome pte Te Frisur(e) 10 Faces Available IMMUNISATION DAY CARE UNIT NEURD DEVELOPMENTAL WING LAB TESTS 2.5~25.",
+        "ground_truth": "Date: April 10, 2010 Aptus Medical Arts W.E. Hansen 123 Homestead Pl. Suite 2 Searchlight, NV 89046 Name: Harry Hypertensive M / F Age: 59 Address: 999 Gold Mine Rd Wt: 93.6 kg Rx Losartan 50 milligram Tabs, Dispense #30 Sig: Take one by mouth daily in the morning for blood pressure control Refill 6 (six) times Signature WEHansen, MD Generic Substitution OK DEA #:"
+      },
+      {
+        "image": "C:\\Users\\LENOVO\\.cache\\kagglehub\\datasets\\codinganirbanb\\doctor-prescription-labelled-dataset\\versions\\1\\prepared_image_data\\126\\126.jpg",
+        "prediction": "Name: Lolita Aluasery Address: Bagong Ilog, Pasig City Age: 39 Sex: F Date: 2-5-13 Rx FeSO4 tab #30 Sig: A.D. Ascorbic Acid #30 500mg tab Sig. Once a day Physician's Sig. Jdelacruz Lic. No. 12345 PTR No. 1234567 S2 No.",
+        "ground_truth": "Name Shorty Powell Date 11/16/10 Address Rx Phenytoin Sodium Extended 100 mg tid #90 LABEL Refill 0-1-2-3-4-5-PRN Generic Substitution Permitted M.D. Copyright\u00a9 American Pharmacists Association PharmacyLibrary. All rights reserved. Any use is subject to the Terms of Use."
+      },
+      {
+        "image": "C:\\Users\\LENOVO\\.cache\\kagglehub\\datasets\\codinganirbanb\\doctor-prescription-labelled-dataset\\versions\\1\\prepared_image_data\\14\\14.jpg",
+        "prediction": "24 MAY 2011 Gastritis x 1 week. Pain Abdomen Psed on food intake Headache x 3 days 36 Rx T. Ranitidine 150mg BD X 5 Days T. Paracetamol 500mg TDS X 5 Days Aditya",
+        "ground_truth": "YOURGP. Compassion Care Cure. DR. Ajay Sahdev. MBBS, DFM (R.C.G.P.) (U.K.), Fellowship In Diabetes (Royal Liverpool Academy, UK), DMC-5814. Consultant Family Physician & Diabetologist. +91-9810225050. 24/4/21. MR. AJAY SETHI 62/M. CC: COVID +ve. Adv: Inj REMDEC 200 mg STAT, 100 mg OD X 4 days. Inj Actemra 400 mg OD X 2 with a gap of 2 days. Dr. Ajay Sahdev signature. www.yourgp.in. E-37 A #15, Rajouri Garden, New Delhi-110027. This prescription is not for Medico Legal Purposes."
+      },
+      {
+        "image": "C:\\Users\\LENOVO\\.cache\\kagglehub\\datasets\\codinganirbanb\\doctor-prescription-labelled-dataset\\versions\\1\\prepared_image_data\\18\\18.jpg",
+        "prediction": "2 1344 DIR RAHUL THAKUR AMBAS, OCH DCH Lond INIBUS MIAP 02. Monong (2009 - 8 pe gome pte Te Frisur(e) 10 Faces Available IMMUNISATION DAY CARE UNIT NEURD DEVELOPMENTAL WING LAB TESTS 2.5~25.",
+        "ground_truth": "Name Shorty Powell Date 11/16/10 Address Rx Phenytoin Sodium Extended 100 mg tid #90 LABEL Refill 0-1-2-3-4-5-PRN Generic Substitution Permitted Allen M.D."
+      },
+      {
+        "image": "C:\\Users\\LENOVO\\.cache\\kagglehub\\datasets\\codinganirbanb\\doctor-prescription-labelled-dataset\\versions\\1\\prepared_image_data\\91\\91.jpg",
+        "prediction": "28/08/19\nHb-9.8g/dl\nTLC: 23000\nESR-25\nPCV\u2193MCV\u2193MCH\u2193MCHC\u2193\nt/c: 8.3:1\nTyphidat IgM-Neg\n989974\n\u211e\n\u2192 Syr. Cefelac (5ml/100mg)\n3ml BD x 7 days\n\u2192 Syr. RB Tone Kid (5ml/80mg)\n2.5ml OD x 2 months\n\u2192 Syr. wikoryl\n3ml x 3 days",
+        "ground_truth": "\u091f\u093e\u0902\u0938\u093f\u0932 Tonsils \u0932\u093e\u0930 \u0917\u094d\u0930\u0902\u0925\u093f\u092f\u093e\u0902 Salivary Glands \u0915\u0930\u094b\u091f\u093f \u0924\u0902\u0924\u094d\u0930\u093f\u0915\u093e\u090f\u0902 Cranial Nerves \u0917\u094d\u0930\u0940\u0935\u093e Neck \u0925\u093e\u0907\u0930\u093e\u092f\u0921 Thyroid \u0932\u0938\u0915\u093e \u092a\u0930\u094d\u0935\u0915 Lymph Nodes \u0935\u0915\u094d\u0937 Thorax \u091b\u093e\u0924\u0940 Breasts \u0939\u0943\u0926\u092f Heart \u092b\u0941\u092b\u094d\u092b\u0941\u0938 Lungs \u0909\u0926\u0930 Abdomen \u092f\u0915\u0943\u0924 Liver \u092a\u094d\u0932\u0940\u0939\u093e Spleen \u0935\u0943\u0915\u094d\u0915 Kidney \u092e\u094b\u0926\u093f\u092f\u093e\u0902 Gonitalia \u092a\u0941\u0930\u0938\u094d\u0925\u0917\u094d\u0930\u0902\u0925\u093f Prostate \u0935\u0915\u094d\u0937\u0923 \u0935\u0932\u092d Inguinal rings \u092e\u0932\u093e\u0936\u092f Rectum \u0936\u094d\u0930\u094b\u0923\u0940 Pelvis \u0936\u093e\u0916\u093e\u090f\u0902 Extremities \u0938\u0902\u0927\u093f\u092f\u093e\u0902 Joints \u0927\u092e\u0928\u093f\u092f\u093e\u0902 Arteries \u091f\u093e\u0902\" \u0915\u0940 \u0936\u093f\u0930\u093e\u090f\u0902 Leg veins \u0930\u0940\u0922\u093c Spine \u092a\u094d\u0930\u0924\u093f\u0935\u0930\u094d\u0924 Reflexes \u0927\u093e\u0930\u0923\u093e Impression S/B Dept. of Neuro Gunshot injury on 24/8/20. C/o paraplegia and loss of sensation O/E: Grade 0/5 B/L LL loss of sensation below the provisional imp? vascular injury to spin Adv: - MRI Dorso-lumber spine c contrast - Review & Report. We don't take MIC cases. Dy. Supritendent OIC GTBH, 4434 Pads x 100 6.03.2020 3:31pm \u0939\u0938\u094d\u0924\u093e\u0915\u094d\u0937\u0930 Signature \u0936\u093e\u0930\u0940\u0930\u093f\u0915 \u092a\u0930\u0940\u0915\u094d\u0937\u093e Physical Examination"
+      },
+      {
+        "image": "C:\\Users\\LENOVO\\.cache\\kagglehub\\datasets\\codinganirbanb\\doctor-prescription-labelled-dataset\\versions\\1\\prepared_image_data\\101\\101.jpg",
+        "prediction": "28/08/19\nHb-9.8g/dl\nTLC: 23000\nESR-25\nPCV\u2193MCV\u2193MCH\u2193MCHC\u2193\nt/c: 8.3:1\nTyphidat IgM-Neg\n989974\n\u211e\n\u2192 Syr. Cefelac (5ml/100mg)\n3ml BD x 7 days\n\u2192 Syr. RB Tone Kid (5ml/80mg)\n2.5ml OD x 2 months\n\u2192 Syr. wikoryl\n3ml x 3 days",
+        "ground_truth": "Medicines Prescribed: S.no Medicine (CAPITAL LETTERS PLEASE) Strength Days Timings Morning Afternoon Evening 1 T Dilo ou 3 days 2 T Paneto 3 T BLC Follow up advice: Doctor: 8/9/21"
+      },
+      {
+        "image": "C:\\Users\\LENOVO\\.cache\\kagglehub\\datasets\\codinganirbanb\\doctor-prescription-labelled-dataset\\versions\\1\\prepared_image_data\\111\\111.jpg",
+        "prediction": "Manipal Hospitals LIVES ON To whomsoever it may concern, This patient Mr Akula Vamsi 30/M Hospital No. 5872575, came with c/o (L) eye pain & (L) facial pain. H/o covid disease on 11/5/21. Taken steroids oral & iv underwent FESS & LA on 26/5/21. HPE - revealed Mucormycosis infestation hence advised to take Inj Liposomal Amphotericin B. Drug: Inj Liposomal Amphotericin B Dose 350 mg - I v ials Duration: 4 weeks Total No. of vials - 196 vials kindly do the needful Thanking You Dr. Bathi Reddy Consultant, ENT Surgeon, Department of ENT Manipal Hospital, Bangalore - 17 Regd. No. 30227 Manipal Hospital HAL Airport Road #98, HAL Airport Road, Bengaluru 560017 MARS 2222 1111 Registered Office Manipal Health Enterprises Pvt Ltd",
+        "ground_truth": "\u0921\u0949\u0966 \u0938\u0902\u091c\u0940\u0935 \u0915\u0941\u092e\u093e\u0930 \u0936\u0930\u094d\u092e\u093e Dr. Sanjeev Kumar Sharma M.B.B.S., M.D., (Ped.) Child Specialist CMO Regd. No. 2093/2623 \u0921\u0949\u0966 \u092d\u0930\u0924 \u0915\u0941\u092e\u093e\u0930 \u0936\u0930\u094d\u092e\u093e Dr. Bharat Kumar Sharma DCH, MD, MRCP, FNNF (Neonatology) Fellowship in Perinatology & Neonatology (NNF) Phone: 0532-2423450 Rx Aarns Date 11/11/19 162 1. T. Tayp 5ml 2. T. Enlh PD 5ml 3. T. Ach M 5ml 4. M Reenyjo 100 5ml Nebulization: Dualu 2ml, Budel 0.5g Inj. Dexpure 2ml i.m. \u091f\u0940\u0915\u093e\u0915\u0930\u0923 \u0936\u0928\u093f\u0935\u093e\u0930, \u0907\u0924\u0935\u093e\u0930 \u0924\u0925\u093e \u0938\u094b\u092e\u0935\u093e\u0930 \u0915\u094b \u0928\u0939\u0940\u0902 \u0939\u094b\u0924\u093e\u0964 \u0938\u092a\u094d\u0924\u093e\u0939 \u0915\u0947 \u0936\u0947\u0937 4 \u0926\u093f\u0928 \u091f\u0940\u0915\u093e\u0915\u0930\u0923 \u0939\u094b\u0924\u093e \u0939\u0948 \u0964 \u0928\u092e\u094d\u092c\u0930 \u0915\u0947 \u0932\u093f\u090f lybrate.com \u092a\u0930 log \u0915\u0930\u0947\u0902 \u092f\u093e \u092e\u094b\u0966 7007359086 \u092a\u0930 \u0915\u0949\u0932 \u0915\u0930\u0947\u0902\u0964 \u0928\u093f\u0935\u093e\u0938 : \u092c\u0940-25, \u090f\u0915\u093e\u0902\u0915\u0940 \u0915\u0941\u0902\u091c, \u0930\u093e\u091c\u093e\u092a\u0941\u0930, \u0939\u0928\u0941\u092e\u093e\u0928 \u092e\u0928\u094d\u0926\u093f\u0930 \u0915\u0947 \u092a\u093e\u0938, \u0907\u0932\u093e\u0939\u093e\u092c\u093e\u0926 \u092a\u0930\u094d\u091a\u093e 5 \u0926\u093f\u0928 \u0915\u0940 O.P.D. \u0915\u0947 \u0932\u093f\u092f\u0947 \u092e\u093e\u0928\u094d\u092f \u0938\u092e\u092f : \u092a\u094d\u0930\u093e\u0924\u0903 10.00 \u0938\u0947 2.00 \u092c\u091c\u0947 \u0924\u0915 \u0936\u093e\u092e 6.00 \u0938\u0947 8.00 \u092c\u091c\u0947 \u0924\u0915 \u0930\u0935\u093f\u0935\u093e\u0930 \u0905\u0935\u0915\u093e\u0936"
+      },
+      {
+        "image": "C:\\Users\\LENOVO\\.cache\\kagglehub\\datasets\\codinganirbanb\\doctor-prescription-labelled-dataset\\versions\\1\\prepared_image_data\\77\\77.jpg",
+        "prediction": "Dr B. Who\\nFarmstreet 12 Kirkville\\ntel. 3876\\nR/ date 1 nov 1994\\nParacetamol 500 mg\\ntab. da no. 20\\nS. 2 tabl. at least 20 min. after the metoclopramide\\nRp metoclopramide 10 mg supp. da no. 5\\nS. one supp. as soon as an attach is felt.\\nMs/Mr Patient 31 B. Who\\naddress:\\nage:",
+        "ground_truth": "Dr B. Who\nFarmstreet 12\nKirkville\ntel. 3876\nR/ date 1 nov 1994\nParacetamol 500 mg\ntab. da no. 20\nS. 2 tab. at least 20 min. after the metoclopramide\nRp metoclopramide 10 mg supp. da no. 5\nS. one supp. as soon as an attach is felt.\nMs/Mr Patient 31 B. Who\naddress:\nage:"
+      }
+    ]
+  }
+}

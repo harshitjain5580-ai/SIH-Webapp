@@ -29,7 +29,7 @@ def _load():
 
                 base = AutoModelForCausalLM.from_pretrained(
                     model_name,
-                    dtype=dtype,
+                    torch_dtype=dtype,
                     low_cpu_mem_usage=True,
                     device_map={"": 0} if device == "cuda" else None,
                 )
