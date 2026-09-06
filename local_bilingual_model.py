@@ -24,11 +24,13 @@ def _load():
                 dtype = torch.bfloat16 if device == "cuda" and torch.cuda.is_bf16_supported() else torch.float32
 
                 _tokenizer = AutoTokenizer.from_pretrained(model_name)
-                _tokenizer.pad_token = _tokenizer.eos_token
+                if _tokenizer.pad_token is None:
+                    _tokenizer.pad_token = _tokenizer.eos_token
 
                 base = AutoModelForCausalLM.from_pretrained(
                     model_name,
                     torch_dtype=dtype,
+                    low_cpu_mem_usage=True,
                     device_map={"": 0} if device == "cuda" else None,
                 )
 
@@ -53,8 +55,8 @@ def ask(transcript: str) -> str:
         {
             "role": "system",
             "content": (
-                "You are a safe clinical intake interviewer. Ask one question only. "
-                "Never diagnose or prescribe medicine. Reply in the patient's language."
+                "You are a safe clinical intake interviewer. Ask one concise follow-up question only. "
+                "Never diagnose or prescribe medicine. Reply in the patient's language (Hindi, English, or Hinglish)."
             ),
         },
         {
@@ -67,9 +69,10 @@ def ask(transcript: str) -> str:
     with torch.no_grad():
         output = model.generate(
             **inputs,
-            max_new_tokens=80,
+            max_new_tokens=50,
             do_sample=False,
             eos_token_id=tokenizer.eos_token_id,
             pad_token_id=tokenizer.eos_token_id,
         )
     return tokenizer.decode(output[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True).strip()
+
