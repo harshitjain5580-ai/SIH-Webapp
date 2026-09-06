@@ -20,10 +20,8 @@ Full architecture rules, tech stack, and the clinical data contracts live in [`c
 - **Speech synthesis:** Local `pyttsx3`, OpenAI TTS, or configurable Bhashini
   TTS
 - **Database and storage:** Supabase PostgreSQL and Supabase Storage
-- **Frontend handoff:** Three independent frontend workstreams are documented
-  in [`FRONTEND_README.md`](FRONTEND_README.md)
-
-The backend is device-independent: web and mobile frontends call these APIs;
+The backend is device-independent: mobile and web clients can call these APIs
+without exposing the backend keys;
 the local AI models run on the backend machine.
 
 ## Getting Started
@@ -158,10 +156,6 @@ Important: automatic self-training from every live patient interaction is not en
 For a beginner-friendly, step-by-step explanation of the dataset, tokenizer,
 fine-tuning, LoRA adapter, training settings, inference flow, and limitations,
 see [`training/README.md`](training/README.md#how-the-model-was-trained-class-10-explanation).
-
-For the three-person frontend implementation plan, screen layouts, API
-contracts, voice integration, and end-to-end acceptance test, see
-[`FRONTEND_README.md`](FRONTEND_README.md).
 
 ## Datasets and training
 

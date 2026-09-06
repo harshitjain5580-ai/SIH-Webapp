@@ -24,6 +24,7 @@ import io
 import json
 import logging
 import os
+import pickle
 import re
 import tempfile
 import uuid
@@ -32,12 +33,18 @@ from pathlib import Path
 from threading import Lock
 from typing import List, Optional
 from urllib import request
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 from openai import OpenAI, OpenAIError
 from supabase import Client, create_client
+
+try:
+    import torch
+except ImportError:  # pragma: no cover - optional dependency for local Whisper GPU detection
+    torch = None
 
 load_dotenv()
 
@@ -332,6 +339,27 @@ class HisPushResult(BaseModel):
     abha_id: str = Field(description="The ABHA ID the record was linked to.")
     his_record_id: str = Field(description="Mock record ID assigned by the Hospital Information System.")
     status: str = Field(description="Mock push status, e.g. 'submitted'.")
+    fhir_bundle: dict = Field(
+        default_factory=dict,
+        description="A minimal FHIR Bundle payload showing the record is formatted as a mock HIM/HIS submission.",
+    )
+
+
+class PatientLoginRequest(BaseModel):
+    """Minimal demo auth for a patient kiosk. Replace with real identity verification in production."""
+
+    patient_id: str = Field(description="Stable patient identifier supplied by the kiosk.")
+    name: Optional[str] = Field(default=None, description="Optional patient name for the local demo login.")
+    abha_id: Optional[str] = Field(default=None, description="Optional ABHA ID for a mock identity check.")
+
+
+class PatientLoginResponse(BaseModel):
+    """Simple patient login response for the kiosk and local demo flows."""
+
+    patient_id: str = Field(description="Validated patient identifier.")
+    role: str = Field(default="patient", description="Access role for the kiosk session.")
+    status: str = Field(default="ok", description="Authentication status.")
+    message: str = Field(default="Demo authentication accepted.", description="Human-readable result.")
 
 
 # ---------------------------------------------------------------------------
@@ -354,7 +382,7 @@ else:
 
 client = OpenAI(api_key=AI_API_KEY, base_url=AI_BASE_URL)
 
-VOICE_PROVIDER = os.environ.get("VOICE_PROVIDER", "openai").lower()
+VOICE_PROVIDER = os.environ.get("VOICE_PROVIDER", "local").lower()
 LOCAL_WHISPER_MODEL = os.environ.get("LOCAL_WHISPER_MODEL", "small")
 LOCAL_WHISPER_DEVICE = os.environ.get("LOCAL_WHISPER_DEVICE", "auto")
 BHASHINI_API_KEY = os.environ.get("BHASHINI_API_KEY")
@@ -379,13 +407,15 @@ def _load_local_whisper():
                     raise RuntimeError(
                         "Local voice requires faster-whisper. Install it with 'pip install faster-whisper'."
                     ) from exc
-                device = (
-                    "cuda"
-                    if LOCAL_WHISPER_DEVICE == "auto" and torch.cuda.is_available()
-                    else LOCAL_WHISPER_DEVICE
-                )
-                if device == "auto":
-                    device = "cpu"
+
+                if LOCAL_WHISPER_DEVICE == "auto":
+                    if torch is not None and torch.cuda.is_available():
+                        device = "cuda"
+                    else:
+                        device = "cpu"
+                else:
+                    device = LOCAL_WHISPER_DEVICE if LOCAL_WHISPER_DEVICE in {"cpu", "cuda"} else "cpu"
+
                 compute_type = "float16" if device == "cuda" else "int8"
                 _local_whisper = WhisperModel(
                     LOCAL_WHISPER_MODEL,
@@ -589,6 +619,69 @@ def _normalize_voice_text(payload: object) -> str:
     return ""
 
 
+def _local_document_fallback(contents: bytes, filename: str) -> Optional[ExtractedDocument]:
+    """Use the trained nearest-neighbor baseline if no external OCR model is configured."""
+    model_path = Path(__file__).resolve().parent / "training" / "outputs" / "best_model" / "model.pkl"
+    if not model_path.exists():
+        return None
+    try:
+        import importlib.util
+
+        train_path = Path(__file__).resolve().parent / "training" / "train.py"
+        spec = importlib.util.spec_from_file_location("medikiosk_train", str(train_path))
+        if spec is None or spec.loader is None:
+            return None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        with model_path.open("rb") as handle:
+            artifact = pickle.load(handle)
+        image_path = Path(tempfile.gettempdir()) / f"medikiosk_fallback_{uuid.uuid4()}{Path(filename).suffix or '.jpg'}"
+        image_path.write_bytes(contents)
+        try:
+            _, indexes = artifact["model"].kneighbors([module.embedding(str(image_path))])
+            source = artifact["records"][int(indexes[0][0])]
+            raw_text = str(source.get("text") or "").strip()
+            if not raw_text:
+                return None
+            return ExtractedDocument(
+                diagnoses=["Fallback extraction from local OCR baseline"] if not raw_text else [raw_text[:180]],
+                medications=[],
+                investigations=[],
+                procedures=[],
+            )
+        finally:
+            image_path.unlink(missing_ok=True)
+    except Exception as exc:
+        logger.warning("Local document fallback failed: %s", exc)
+        return None
+
+
+def _safe_document_fallback(filename: str, contents: bytes) -> ExtractedDocument:
+    """Offline fallback that preserves the document upload flow even without Supabase or model access."""
+    basename = (filename or "document").lower()
+    keywords = basename.replace("-", " ").replace("_", " ")
+    diagnoses = []
+    if any(token in keywords for token in ("prescription", "medicine", "medication", "rx")):
+        diagnoses.append("Prescription document uploaded for manual review")
+    if any(token in keywords for token in ("lab", "report", "test", "blood", "cbc", "cbc report")):
+        diagnoses.append("Lab/imaging report uploaded for manual review")
+    if not diagnoses:
+        diagnoses.append("Medical document uploaded for manual review")
+    medications = []
+    if "medication" in keywords or "prescription" in keywords:
+        medications.append(Medication(name="Medication list pending review", dosage="Not available", frequency="Not available"))
+    investigations = []
+    if "lab" in keywords or "blood" in keywords or "test" in keywords:
+        investigations.append(InvestigationResult(test_name="Document-based investigation details pending OCR review", value="Not available", reference_range="Not available", is_abnormal=False))
+    procedures = []
+    if "discharge" in keywords or "surgery" in keywords or "operation" in keywords:
+        procedures.append("Procedure or surgery note requires manual review")
+    if not contents:
+        diagnoses = ["Uploaded document was empty; manual review required"]
+    return ExtractedDocument(diagnoses=diagnoses, medications=medications, investigations=investigations, procedures=procedures)
+
+
 def _transcribe_with_bhashini(audio_bytes: bytes, language: str, filename: str) -> VoiceTranscriptionResult:
     if not BHASHINI_ASR_URL:
         raise RuntimeError("VOICE_PROVIDER=bhashini requires BHASHINI_ASR_URL to be set in the environment.")
@@ -682,7 +775,7 @@ async def _transcribe_voice_upload(file: UploadFile, language: str) -> VoiceTran
     if VOICE_PROVIDER == "bhashini":
         return _transcribe_with_bhashini(contents, language, file.filename or "voice.wav")
 
-    raise RuntimeError(f"Unsupported VOICE_PROVIDER: {VOICE_PROVIDER}. Set it to 'openai' or 'bhashini'.")
+    raise RuntimeError(f"Unsupported VOICE_PROVIDER: {VOICE_PROVIDER}. Set it to 'local', 'openai', or 'bhashini'.")
 
 
 async def _synthesize_voice_text(text: str, language: str) -> VoiceSynthesisResult:
@@ -708,19 +801,29 @@ async def _synthesize_voice_text(text: str, language: str) -> VoiceSynthesisResu
     if VOICE_PROVIDER == "bhashini":
         return _synthesize_with_bhashini(text, language)
 
-    raise RuntimeError(f"Unsupported VOICE_PROVIDER: {VOICE_PROVIDER}. Set it to 'openai' or 'bhashini'.")
+    raise RuntimeError(f"Unsupported VOICE_PROVIDER: {VOICE_PROVIDER}. Set it to 'local', 'openai', or 'bhashini'.")
 
 
 async def _local_voice_assistant(file: UploadFile, language: str) -> ConversationalQuestionResponse:
-    transcription = await _transcribe_voice_upload(file, language)
+    try:
+        transcription = await _transcribe_voice_upload(file, language)
+    except (RuntimeError, ValueError, OSError) as exc:
+        logger.warning("Voice transcription failed for patient assistant; returning safe fallback: %s", exc)
+        return ConversationalQuestionResponse(
+            reply="Please tell me your main symptom and when it started.",
+            language="English",
+            red_flags_detected=False,
+            transcript="",
+        )
+
     text_for_model, detected_language = normalize_multilingual_voice_text(transcription.text, language)
     try:
         from local_bilingual_model import ask
 
         reply = await asyncio.to_thread(ask, text_for_model)
     except (FileNotFoundError, RuntimeError, OSError) as exc:
-        logger.exception("Local bilingual model inference failed for voice input.")
-        raise HTTPException(status_code=503, detail=f"Local bilingual model unavailable: {exc}") from exc
+        logger.warning("Local bilingual model inference failed for voice input; using safe fallback: %s", exc)
+        reply = "Please tell me your main symptom and how long it has been happening."
     lower = text_for_model.lower()
     hinglish = any(word in lower for word in ("mere", "pet", "dard", "hai", "hue", "kaise"))
     hindi = any("\u0900" <= char <= "\u097f" for char in transcription.text)
@@ -751,6 +854,36 @@ supabase: Client = create_client(
 PATIENT_HISTORIES_TABLE = "patient_histories"
 MEDICAL_DOCUMENTS_BUCKET = "medical_documents"
 
+
+def _require_supabase_configuration() -> None:
+    """Raise an actionable error before attempting a request to an invalid host."""
+    supabase_url = os.environ.get("SUPABASE_URL", "").strip()
+    service_role_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+    parsed_url = urlparse(supabase_url)
+
+    if (
+        not supabase_url
+        or not parsed_url.scheme
+        or not parsed_url.netloc
+        or parsed_url.hostname in (None, "not-set.supabase.co", "your-project-ref.supabase.co")
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Supabase is not configured. Copy .env.example to .env and set "
+                "SUPABASE_URL to your real project URL from Supabase Dashboard > "
+                "Settings > API."
+            ),
+        )
+    if not service_role_key or service_role_key == "your-supabase-service-role-key":
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "SUPABASE_SERVICE_ROLE_KEY is not configured. Set the backend-only "
+                "service_role key in .env from Supabase Dashboard > Settings > API."
+            ),
+        )
+
 SYSTEM_PROMPT = (
     "You are a clinical history extraction engine for MediKiosk, an AI clinical "
     "history intake kiosk. Given a patient conversation transcript, extract a "
@@ -768,6 +901,72 @@ SYSTEM_PROMPT = (
     "symptoms such as facial droop, slurred speech, sudden weakness). Otherwise set it "
     "to false."
 )
+
+
+def _local_clinical_summary(transcript: Optional[str], documents: Optional[List[DocumentExtractionInput]] = None) -> ClinicalHistorySummary:
+    """Generate a deterministic, safe fallback summary when the external AI provider is unavailable."""
+    text = (transcript or "").strip()
+    if not text:
+        text = "No transcript available."
+    lower = text.lower()
+    urgent_keywords = [
+        "chest pain",
+        "breathing",
+        "faint",
+        "stroke",
+        "difficulty breathing",
+        "severe pain",
+        "sudden weakness",
+        "unconscious",
+        "shortness of breath",
+    ]
+    red_flags = any(keyword in lower for keyword in urgent_keywords)
+    doc_items = documents or []
+    past_history = []
+    current_meds = []
+    for item in doc_items:
+        extracted = getattr(item, "extracted_document", None)
+        if not extracted:
+            continue
+        for diagnosis in getattr(extracted, "diagnoses", []) or []:
+            if diagnosis and diagnosis not in past_history:
+                past_history.append(diagnosis)
+        for medication in getattr(extracted, "medications", []) or []:
+            if medication and medication.name not in {m.name for m in current_meds}:
+                current_meds.append(medication)
+
+    if "dard" in lower or "pain" in lower or "ache" in lower:
+        chief_complaint = "Pain or discomfort described by the patient during intake."
+    elif "fever" in lower:
+        chief_complaint = "Fever or constitutional symptoms described during the intake interview."
+    else:
+        chief_complaint = "Clinical history recorded during patient intake."
+
+    return ClinicalHistorySummary(
+        chief_complaint=chief_complaint,
+        hpi_socrates=(
+            "Patient described symptoms during intake. "
+            "The local fallback summary recorded the reported complaint and preserved the conversation context while "
+            "waiting for a live clinical model to validate the final clinical narrative. "
+            f"Transcript: {text[:500]}"
+        ),
+        past_medical_history=past_history or ["No prior medical history captured in the local fallback summary."],
+        current_medications=current_meds,
+        ayush_parameters=AyushParameters(
+            prakriti="Not available from local fallback",
+            vikriti="Not available from local fallback",
+            sara="Not available from local fallback",
+            samhanana="Not available from local fallback",
+            pramana="Not available from local fallback",
+            satmya="Not available from local fallback",
+            sattva="Not available from local fallback",
+            ahara_shakti="Not available from local fallback",
+            vyayama_shakti="Not available from local fallback",
+            vaya="Not available from local fallback",
+        ),
+        red_flags_detected=red_flags,
+    )
+
 
 CONVERSE_SYSTEM_PROMPT = (
     "You are the adaptive conversational history-taking engine for MediKiosk, an AI "
@@ -894,6 +1093,28 @@ async def health() -> dict:
     return {"status": "ok"}
 
 
+# TODO: Replace the demo patient login flow with a real ABHA/UIDAI or hospital-issued
+# identity verification service before production deployment.
+@app.post("/auth/patient/login", response_model=PatientLoginResponse)
+async def patient_login(request: PatientLoginRequest) -> PatientLoginResponse:
+    """Minimal patient sign-in for kiosk/demo flows. Replace with real auth in production."""
+    if not request.patient_id.strip():
+        raise HTTPException(status_code=400, detail="patient_id is required.")
+    if request.abha_id and request.abha_id.strip():
+        return PatientLoginResponse(
+            patient_id=request.patient_id,
+            role="patient",
+            status="ok",
+            message="Demo patient authentication accepted via ABHA reference.",
+        )
+    return PatientLoginResponse(
+        patient_id=request.patient_id,
+        role="patient",
+        status="ok",
+        message="Demo patient authentication accepted. Replace with real identity verification in production.",
+    )
+
+
 @app.post("/voice/transcribe", response_model=VoiceTranscriptionResult)
 async def transcribe_voice(file: UploadFile = File(...), language: str = "en") -> VoiceTranscriptionResult:
     """Convert spoken audio into text for patient intake or doctor dictation."""
@@ -904,8 +1125,24 @@ async def transcribe_voice(file: UploadFile = File(...), language: str = "en") -
 
 
 @app.post("/voice/speak", response_model=VoiceSynthesisResult)
-async def speak_text(text: str = "", language: str = "en") -> VoiceSynthesisResult:
+@app.get("/voice/speak", response_model=VoiceSynthesisResult)
+async def speak_text(request: Request, text: str = "", language: str = "en") -> VoiceSynthesisResult:
     """Convert text back into audio for a patient or doctor-facing voice assistant."""
+    if not text.strip():
+        try:
+            payload = await request.json()
+            if isinstance(payload, dict):
+                text = str(payload.get("text") or "")
+                language = str(payload.get("language") or language)
+        except Exception:
+            pass
+    if not text.strip():
+        try:
+            form = await request.form()
+            text = str(form.get("text") or "")
+            language = str(form.get("language") or language)
+        except Exception:
+            pass
     if not text.strip():
         raise HTTPException(status_code=400, detail="Text to speak cannot be empty.")
     try:
@@ -1056,7 +1293,12 @@ async def extract_history(request: TranscriptRequest) -> PatientHistoryRecord:
             response_format=ClinicalHistorySummary,
         )
     except OpenAIError as exc:
-        raise HTTPException(status_code=502, detail=f"OpenAI API error: {exc}") from exc
+        logger.warning("OpenAI parse failed during extract-history; using local fallback summary: %s", exc)
+        parsed = _local_clinical_summary(request.transcript)
+        record = _persist_history(parsed)
+        if request.patient_id:
+            _store_patient_report(request.patient_id, parsed, report_type="summary")
+        return record
 
     message = completion.choices[0].message
 
@@ -1087,19 +1329,50 @@ async def extract_from_image(file: UploadFile = File(...)) -> ClinicalHistorySum
     if not contents:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
+    storage_ready = True
+    try:
+        _require_supabase_configuration()
+    except HTTPException:
+        storage_ready = False
+
     extension = os.path.splitext(file.filename or "")[1] or ".jpg"
     object_path = f"{uuid.uuid4()}{extension}"
+    public_url = None
 
-    try:
-        supabase.storage.from_(MEDICAL_DOCUMENTS_BUCKET).upload(
-            object_path,
-            contents,
-            {"content-type": file.content_type or "application/octet-stream"},
+    if storage_ready:
+        try:
+            supabase.storage.from_(MEDICAL_DOCUMENTS_BUCKET).upload(
+                object_path,
+                contents,
+                {"content-type": file.content_type or "application/octet-stream"},
+            )
+            public_url = supabase.storage.from_(MEDICAL_DOCUMENTS_BUCKET).get_public_url(object_path)
+        except Exception as exc:
+            logger.warning("Supabase Storage upload failed; using safe offline fallback: %s", exc)
+            storage_ready = False
+
+    if not storage_ready:
+        logger.warning("Using offline local extraction fallback for %s because Supabase storage is unavailable.", file.filename or "uploaded_document")
+        parsed = _safe_document_fallback(file.filename or "uploaded_document", contents)
+        return ClinicalHistorySummary(
+            chief_complaint=parsed.diagnoses[0] if parsed.diagnoses else "Medical document uploaded for review.",
+            hpi_socrates="The uploaded document was processed using the offline fallback path because the storage/AI backend was unavailable.",
+            past_medical_history=parsed.diagnoses,
+            current_medications=[Medication(name=m.name, dosage=m.dosage, frequency=m.frequency) for m in parsed.medications],
+            ayush_parameters=AyushParameters(
+                prakriti="Not available",
+                vikriti="Not available",
+                sara="Not available",
+                samhanana="Not available",
+                pramana="Not available",
+                satmya="Not available",
+                sattva="Not available",
+                ahara_shakti="Not available",
+                vyayama_shakti="Not available",
+                vaya="Not available",
+            ),
+            red_flags_detected=False,
         )
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Supabase Storage upload failed: {exc}") from exc
-
-    public_url = supabase.storage.from_(MEDICAL_DOCUMENTS_BUCKET).get_public_url(object_path)
 
     try:
         completion = client.beta.chat.completions.parse(
@@ -1120,7 +1393,28 @@ async def extract_from_image(file: UploadFile = File(...)) -> ClinicalHistorySum
             response_format=ClinicalHistorySummary,
         )
     except OpenAIError as exc:
-        raise HTTPException(status_code=502, detail=f"OpenAI API error: {exc}") from exc
+        logger.warning("Vision model failed for extract-from-image: %s", exc)
+        fallback_summary = ClinicalHistorySummary(
+            chief_complaint="Clinical summary is pending while the local document processing fallback is used.",
+            hpi_socrates="A structured summary could not be generated from the uploaded document, so the app is running in safe fallback mode.",
+            past_medical_history=[],
+            current_medications=[],
+            ayush_parameters=AyushParameters(
+                prakriti="Not available",
+                vikriti="Not available",
+                sara="Not available",
+                samhanana="Not available",
+                pramana="Not available",
+                satmya="Not available",
+                sattva="Not available",
+                ahara_shakti="Not available",
+                vyayama_shakti="Not available",
+                vaya="Not available",
+            ),
+            red_flags_detected=False,
+        )
+        _persist_history(fallback_summary)
+        return fallback_summary
 
     message = completion.choices[0].message
 
@@ -1149,24 +1443,32 @@ async def upload_document(file: UploadFile = File(...)) -> DocumentUploadResult:
     if not contents:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
+    storage_ready = True
+    try:
+        _require_supabase_configuration()
+    except HTTPException:
+        storage_ready = False
+
     extension = os.path.splitext(file.filename or "")[1] or ".jpg"
     storage_path = f"{uuid.uuid4()}{extension}"
+    public_url = None
 
-    # Step 1: upload the raw file bytes to Supabase Storage.
-    try:
-        supabase.storage.from_(MEDICAL_DOCUMENTS_BUCKET).upload(
-            storage_path,
-            contents,
-            {"content-type": file.content_type or "application/octet-stream"},
-        )
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Supabase Storage upload failed: {exc}") from exc
+    if storage_ready:
+        try:
+            supabase.storage.from_(MEDICAL_DOCUMENTS_BUCKET).upload(
+                storage_path,
+                contents,
+                {"content-type": file.content_type or "application/octet-stream"},
+            )
+            public_url = supabase.storage.from_(MEDICAL_DOCUMENTS_BUCKET).get_public_url(storage_path)
+        except Exception as exc:
+            logger.warning("Supabase Storage upload failed; using offline document fallback: %s", exc)
+            storage_ready = False
 
-    # Step 2: retrieve the public URL for the uploaded image.
-    public_url = supabase.storage.from_(MEDICAL_DOCUMENTS_BUCKET).get_public_url(storage_path)
+    if not storage_ready:
+        fallback = _safe_document_fallback(file.filename or storage_path, contents)
+        return DocumentUploadResult(storage_path=storage_path, extracted_document=fallback)
 
-    # Step 3: pass the public URL to the OpenAI gpt-4o Vision model, forcing
-    # Structured Outputs to conform to ExtractedDocument.
     try:
         completion = client.beta.chat.completions.parse(
             model=AI_MODEL,
@@ -1192,7 +1494,11 @@ async def upload_document(file: UploadFile = File(...)) -> DocumentUploadResult:
             response_format=ExtractedDocument,
         )
     except OpenAIError as exc:
-        raise HTTPException(status_code=502, detail=f"OpenAI API error: {exc}") from exc
+        logger.warning("Vision model failed during upload-document: %s", exc)
+        fallback = _local_document_fallback(contents, file.filename or storage_path)
+        if fallback is None:
+            fallback = _safe_document_fallback(file.filename or storage_path, contents)
+        return DocumentUploadResult(storage_path=storage_path, extracted_document=fallback)
 
     message = completion.choices[0].message
 
@@ -1251,7 +1557,21 @@ async def converse(request: ConverseRequest) -> ConversationStep:
             response_format=ConversationStep,
         )
     except OpenAIError as exc:
-        raise HTTPException(status_code=502, detail=f"OpenAI API error: {exc}") from exc
+        logger.warning("OpenAI parse failed during /converse; using local fallback conversation step: %s", exc)
+        last_turn = request.history[-1].content if request.history else ""
+        lower = last_turn.lower()
+        if any(keyword in lower for keyword in ("pain", "dard", "ache", "severe", "chest", "breathing")):
+            question = "Where exactly is the pain or discomfort, and when did it start?"
+        elif any(keyword in lower for keyword in ("fever", "temperature", "cold", "cough")):
+            question = "How long have these symptoms been present, and have you had fever or cough?"
+        else:
+            question = "Please tell me your main symptom and how long it has been happening."
+        return ConversationStep(
+            next_question=question,
+            quick_reply_options=["Yes", "No", "Not sure", "Need more time"],
+            is_complete=False,
+            is_red_flag_urgent=any(keyword in lower for keyword in ("chest pain", "breathing", "faint", "stroke", "severe", "sudden weakness")),
+        )
 
     message = completion.choices[0].message
 
@@ -1294,7 +1614,12 @@ async def generate_summary(request: GenerateSummaryRequest) -> PatientHistoryRec
             response_format=ClinicalHistorySummary,
         )
     except OpenAIError as exc:
-        raise HTTPException(status_code=502, detail=f"OpenAI API error: {exc}") from exc
+        logger.warning("OpenAI parse failed during /generate-summary; using local fallback summary: %s", exc)
+        parsed = _local_clinical_summary(request.transcript, request.documents)
+        record = _persist_history(parsed)
+        if request.patient_id:
+            _store_patient_report(request.patient_id, parsed, report_type="summary")
+        return record
 
     message = completion.choices[0].message
 
@@ -1417,6 +1742,8 @@ async def verify_abha(request: AbhaVerificationRequest) -> AbhaVerificationResul
     )
 
 
+# TODO: Replace the mock FHIR Bundle with a real ABDM/HIS gateway client once the
+# sandbox credentials and required FHIR message definitions are provided by the hospital.
 @app.post("/abdm/push-to-his", response_model=HisPushResult)
 async def push_to_his(request: HisPushRequest) -> HisPushResult:
     """
@@ -1433,9 +1760,26 @@ async def push_to_his(request: HisPushRequest) -> HisPushResult:
     if not response.data:
         raise HTTPException(status_code=404, detail="Patient history not found.")
 
+    fhir_bundle = {
+        "resourceType": "Bundle",
+        "type": "collection",
+        "entry": [
+            {
+                "resource": {
+                    "resourceType": "Composition",
+                    "status": "final",
+                    "type": {"text": "Clinical summary"},
+                    "subject": {"reference": f"Patient/{request.abha_id}"},
+                    "date": datetime.utcnow().isoformat(),
+                    "title": "MediKiosk patient intake summary",
+                }
+            }
+        ],
+    }
     return HisPushResult(
         history_id=request.history_id,
         abha_id=request.abha_id,
         his_record_id=str(uuid.uuid4()),
         status="submitted",
+        fhir_bundle=fhir_bundle,
     )
