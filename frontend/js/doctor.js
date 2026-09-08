@@ -40,7 +40,7 @@ export const DoctorModule = {
     window.App.showToast('Loading clinical intake record...', 'info');
     const record = await ApiService.getPatientHistory(recordId);
     if (!record) {
-      window.App.showToast('Record not found', 'danger');
+      window.App.showToast('This patient record is not available right now.', 'danger');
       return;
     }
 
@@ -171,6 +171,8 @@ export const DoctorModule = {
       this.currentRecord = updated;
       window.App.showToast('Clinical history amendments saved successfully!', 'success');
       window.App.refreshAllData();
+    } else {
+      window.App.showToast('We could not save the changes. Please try again.', 'danger');
     }
   },
 
@@ -190,9 +192,9 @@ export const DoctorModule = {
       if (details) {
         details.innerHTML = `
           <div style="padding:14px; background:#F0FDF4; border:1px solid #BBF7D0; border-radius:var(--utd-border-radius); margin:16px 0;">
-            <p><strong>HIS Record ID:</strong> <code>${result.his_record_id}</code></p>
+            <p><strong>Hospital record reference:</strong> <code>${result.his_record_id}</code></p>
             <p><strong>Linked ABHA ID:</strong> ${result.abha_id}</p>
-            <p><strong>FHIR Submission Status:</strong> <span class="badge badge-success">${result.status.toUpperCase()}</span></p>
+            <p><strong>Record submission status:</strong> <span class="badge badge-success">${result.status.toUpperCase()}</span></p>
             <p><strong>Timestamp:</strong> ${new Date().toLocaleString()}</p>
           </div>
           <p style="font-size:0.9rem; color:var(--utd-color-textsecondary);">

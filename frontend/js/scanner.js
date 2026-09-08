@@ -66,6 +66,8 @@ export const ScannerModule = {
       this.lastExtractedDoc = result;
       this.renderExtractedFindings(result.extracted_document, file.name);
       window.App.showToast('Document analysis complete!', 'success');
+    } else {
+      window.App.showToast('We could not read this document. Please try a clearer image.', 'danger');
     }
   },
 

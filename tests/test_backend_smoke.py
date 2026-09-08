@@ -57,3 +57,71 @@ def test_extract_history_offline_fallback_returns_record():
     assert payload["id"]
     assert payload["chief_complaint"]
     assert payload["alert_acknowledged"] is False
+
+
+def test_conversation_fallback_adapts_to_patient_symptom():
+    response = client.post(
+        "/converse",
+        json={"history": [{"role": "patient", "content": "mere pet me dard hai"}]},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert "dard" in payload["next_question"].lower()
+    assert payload["is_complete"] is False
+
+
+def test_gender_metadata_does_not_replace_first_symptom_question():
+    response = client.post(
+        "/converse",
+        json={"history": [{"role": "patient", "content": "Patient gender selected: Male"}]},
+    )
+    assert response.status_code == 200
+    assert "main symptom" in response.json()["next_question"].lower()
+
+
+def test_conversation_fallback_uses_previous_answer_to_choose_next_detail():
+    response = client.post(
+        "/converse",
+        json={
+            "history": [
+                {"role": "patient", "content": "mere pet me dard hai"},
+                {"role": "assistant", "content": "Dard kis jagah hai?"},
+                {"role": "patient", "content": "pet me jalne wala dard hai"},
+            ]
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert "kab se" in payload["next_question"].lower() or "when did" in payload["next_question"].lower()
+    assert "kis jagah" not in payload["next_question"].lower()
+
+
+def test_conversation_fallback_asks_respiratory_specific_question():
+    response = client.post(
+        "/converse",
+        json={
+            "history": [
+                {"role": "patient", "content": "I have cough and fever for two days"},
+                {"role": "assistant", "content": "How long have you had the cough, cold, or fever?"},
+                {"role": "patient", "content": "Two days"},
+            ]
+        },
+    )
+    assert response.status_code == 200
+    assert "mucus" in response.json()["next_question"].lower()
+
+
+def test_conversation_fallback_asks_urinary_red_flag_question():
+    response = client.post(
+        "/converse",
+        json={
+            "history": [
+                {"role": "patient", "content": "It burns when I pass urine and I go often"},
+                {"role": "assistant", "content": "Do you have burning while passing urine, frequent urination, or urgency?"},
+                {"role": "patient", "content": "Burning and frequent"},
+            ]
+        },
+    )
+    assert response.status_code == 200
+    question = response.json()["next_question"].lower()
+    assert "fever" in question or "back" in question or "blood" in question

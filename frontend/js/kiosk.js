@@ -37,6 +37,12 @@ export const KioskModule = {
   },
 
   bindEvents() {
+    document.querySelectorAll('.gender-option-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.selectGender(btn.dataset.gender || 'Other or prefer not to say');
+      });
+    });
+
     // ABHA Verification
     const abhaBtn = document.getElementById('btn-verify-abha');
     const abhaInput = document.getElementById('kiosk-abha-input');
@@ -106,6 +112,7 @@ export const KioskModule = {
    */
   async resetSession() {
     this.conversationHistory = [];
+    this.currentPatient.gender = '';
     this.isInterviewComplete = false;
     this.redFlagUrgent = false;
     this.socratesState = {
@@ -122,7 +129,27 @@ export const KioskModule = {
     const quickBox = document.getElementById('kiosk-quick-replies');
     if (quickBox) quickBox.innerHTML = '';
 
-    // Trigger initial question
+    this.showGenderSelection();
+  },
+
+  showGenderSelection() {
+    const selector = document.getElementById('kiosk-gender-selection');
+    const chatBox = document.getElementById('kiosk-chat-stream');
+    if (selector) selector.style.display = 'flex';
+    if (chatBox) chatBox.style.display = 'none';
+    this.renderQuickReplies([]);
+  },
+
+  async selectGender(gender) {
+    this.currentPatient.gender = gender;
+    const selector = document.getElementById('kiosk-gender-selection');
+    const chatBox = document.getElementById('kiosk-chat-stream');
+    if (selector) selector.style.display = 'none';
+    if (chatBox) chatBox.style.display = 'flex';
+    this.conversationHistory.push({
+      role: 'patient',
+      content: `Patient gender selected: ${gender}`
+    });
     await this.fetchNextStep();
   },
 

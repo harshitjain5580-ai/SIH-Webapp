@@ -71,12 +71,88 @@ def _build_chatml_examples(frame: pd.DataFrame) -> list[dict]:
     return records
 
 
+def _load_curated_examples(path: Path) -> list[dict]:
+    """Load illness-specific transcript/question pairs kept outside the workbook."""
+    if not path.exists():
+        return []
+    records = []
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Invalid JSON in {path} at line {line_number}") from exc
+        transcript = str(item.get("transcript", "")).strip()
+        if not transcript:
+            continue
+        for language, key in (("English", "question_en"), ("Hindi", "question_hi"), ("Hinglish", "question_hinglish")):
+            question = str(item.get(key, "")).strip()
+            if question:
+                records.append({
+                    "messages": [
+                        {"role": "system", "content": "You are a safe clinical intake interviewer. Ask exactly one short, illness-relevant follow-up question. Never diagnose or prescribe medicine."},
+                        {"role": "user", "content": f"Patient transcript: {transcript}. Continue the interview in {language}."},
+                        {"role": "assistant", "content": question},
+                    ],
+                    "language": language,
+                    "illness": item.get("illness", "common"),
+                })
+    return records
+
+
+def _load_edge_case_examples(path: Path) -> list[dict]:
+    """Convert safe OCR/voice edge-case records into explicit non-diagnostic prompts."""
+    if not path.exists():
+        return []
+    records = []
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Invalid JSON in {path} at line {line_number}") from exc
+        document_type = str(item.get("document_type", "medical document")).strip()
+        quality = str(item.get("input_quality", "unclear image")).replace("_", " ")
+        expected = json.dumps(item.get("expected", {}), ensure_ascii=False, sort_keys=True)
+        instruction = (
+            f"Document type: {document_type}. Image condition: {quality}. "
+            "Extract only high-confidence clinical fields and never guess missing text."
+        )
+        records.append({
+            "messages": [
+                {"role": "system", "content": "You are a safe clinical document-reading assistant. Return only high-confidence structured findings and explicitly leave unclear fields empty."},
+                {"role": "user", "content": instruction},
+                {"role": "assistant", "content": expected},
+            ],
+            "language": "English",
+            "illness": "document-reading",
+        })
+    return records
+
+
+def _deduplicate_examples(examples: list[dict]) -> list[dict]:
+    """Remove repeated prompt/answer pairs before training so added density is useful."""
+    unique = []
+    seen = set()
+    for example in examples:
+        messages = example["messages"]
+        key = (messages[1]["content"].strip().lower(), messages[2]["content"].strip().lower())
+        if key not in seen:
+            seen.add(key)
+            unique.append(example)
+    return unique
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", default="bilingual_clinical_conversation_questions.xlsx")
     parser.add_argument("--output", default="training/outputs/qwen2.5-1.5b-bilingual-lora")
     parser.add_argument("--model", default="Qwen/Qwen2.5-1.5B-Instruct")
     parser.add_argument("--device", choices=["auto", "cuda", "cpu"], default="auto")
+    parser.add_argument("--epochs", type=float, default=3.0, help="Training epochs; use 3-4 for the curated dataset.")
+    parser.add_argument("--learning-rate", type=float, default=5e-5)
     parser.add_argument("--max-samples", type=int, default=None, help="Optional cap for a quick dry-run or smoke training loop.")
     parser.add_argument("--dry-run", action="store_true", help="Validate the dataset and print a sample without running full training.")
     args = parser.parse_args()
@@ -100,6 +176,9 @@ def main() -> None:
         raise ValueError(f"Missing required columns in dataset: {missing}")
     frame = frame.dropna(subset=["English question", "Hindi question (Devanagari)"])
     examples = _build_chatml_examples(frame)
+    examples.extend(_load_curated_examples(Path(__file__).with_name("common_illness_examples.jsonl")))
+    examples.extend(_load_edge_case_examples(Path(__file__).with_name("document_edge_cases.jsonl")))
+    examples = _deduplicate_examples(examples)
     if args.max_samples is not None:
         examples = examples[: args.max_samples]
     if not examples:
@@ -144,10 +223,10 @@ def main() -> None:
         model=model,
         args=TrainingArguments(
             output_dir=str(output / "checkpoints"),
-            num_train_epochs=3,
+            num_train_epochs=args.epochs,
             per_device_train_batch_size=1,
             gradient_accumulation_steps=8,
-            learning_rate=5e-5,
+            learning_rate=args.learning_rate,
             use_cpu=device == "cpu",
             bf16=device == "cuda",
             fp16=False,
@@ -171,10 +250,10 @@ def main() -> None:
             "format": "ChatML",
             "examples": len(examples),
             "languages": ["English", "Hindi", "Hinglish"],
-            "epochs": 3,
+            "epochs": args.epochs,
             "batch_size": 1,
             "gradient_accumulation_steps": 8,
-            "learning_rate": 5e-5,
+            "learning_rate": args.learning_rate,
             "device": device,
             "gpu": torch.cuda.get_device_name(0) if device == "cuda" else None,
             "vram_gib": torch.cuda.get_device_properties(0).total_memory / 1024**3 if device == "cuda" else None,

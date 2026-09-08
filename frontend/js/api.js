@@ -516,7 +516,7 @@ export const ApiService = {
     return {
       history_id: historyId,
       abha_id: abhaId,
-      his_record_id: 'HIS-FHIR-' + Math.floor(100000 + Math.random() * 900000),
+      his_record_id: 'HOSP-' + Math.floor(100000 + Math.random() * 900000),
       status: 'submitted',
       timestamp: new Date().toISOString()
     };

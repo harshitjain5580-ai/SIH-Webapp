@@ -1010,6 +1010,188 @@ CONVERSE_SYSTEM_PROMPT = (
     "interview out longer than necessary."
 )
 
+
+def _fallback_conversation_step(history: List[ConversationTurn]) -> ConversationStep:
+    """Keep the kiosk useful when the external structured-output model is unavailable."""
+    patient_turns = [
+        turn.content.strip()
+        for turn in history
+        if (
+            turn.role == "patient"
+            and turn.content.strip()
+            and not turn.content.strip().lower().startswith("patient gender selected:")
+        )
+    ]
+    last = patient_turns[-1].lower() if patient_turns else ""
+    combined = " ".join(patient_turns).lower()
+    hinglish = bool(re.search(r"\b(mere|mujhe|pet|dard|hai|bukhar|saans|kab se)\b", combined))
+    hindi = any("\u0900" <= char <= "\u097f" for char in combined)
+    urgent = any(
+        marker in combined
+        for marker in (
+            "chest pain", "chest discomfort", "difficulty breathing", "shortness of breath",
+            "breathlessness", "faint", "unconscious", "stroke", "sudden weakness",
+            "सीने में दर्द", "सांस फूल", "बेहोश",
+        )
+    )
+
+    if not patient_turns:
+        question = (
+            "Aapko sabse zyada kya takleef ho rahi hai, aur kab se?"
+            if hinglish else "आपको सबसे ज़्यादा क्या तकलीफ़ हो रही है, और कब से?"
+            if hindi else "What is your main symptom, and when did it start?"
+        )
+        return ConversationStep(
+            next_question=question,
+            quick_reply_options=["Pain", "Fever", "Cough or breathing problem", "Other"],
+            is_complete=False,
+            is_red_flag_urgent=False,
+        )
+
+    assistant_turns = [turn.content.lower() for turn in history if turn.role == "assistant"]
+    urgent_question_already_asked = any(
+        "breathing" in question or "saans" in question or "सांस" in question
+        for question in assistant_turns
+    )
+    if urgent and not urgent_question_already_asked:
+        question = (
+            "Kya abhi saans lene mein dikkat, behoshi, ya dard baazu ya jabde tak ja raha hai?"
+            if hinglish else "क्या अभी सांस लेने में दिक्कत, बेहोशी, या दर्द बाज़ू या जबड़े तक जा रहा है?"
+            if hindi else "Are you having trouble breathing, fainting, or pain spreading to your arm or jaw right now?"
+        )
+        return ConversationStep(
+            next_question=question,
+            quick_reply_options=["Yes", "No", "Not sure"],
+            is_complete=False,
+            is_red_flag_urgent=True,
+        )
+
+    illness = (
+        "respiratory"
+        if any(word in combined for word in ("cough", "cold", "flu", "sore throat", "wheez", "khansi", "zukam", "खांसी", "जुकाम"))
+        else "gastrointestinal"
+        if (
+            any(word in combined for word in ("vomit", "vomiting", "diarrhea", "loose motion", "nausea", "ulti", "dast", "दस्त", "उल्टी"))
+            or ("stomach" in combined and not any(word in combined for word in ("pain", "dard")))
+        )
+        else "urinary"
+        if any(word in combined for word in ("urine", "urinary", "pee", "peshab", "burning while passing", " पेशाब", "मूत्र"))
+        else "headache"
+        if any(word in combined for word in ("headache", "migraine", "head pain", "sir dard", "सिरदर्द", "सिर दर्द"))
+        else None
+    )
+
+    illness_questions = {
+        "respiratory": (
+            ("How long have you had the cough, cold, or fever?", "Yeh khansi, zukam ya bukhar kab se hai?", "यह खाँसी, ज़ुकाम या बुखार कब से है?", ["Today", "A few days", "More than a week"]),
+            ("Are you bringing up mucus, and if so, what color is it?", "Balgham aa raha hai? Agar haan, kis rang ka?", "क्या बलगम आ रहा है? अगर हाँ, किस रंग का?", ["No mucus", "Clear", "Yellow or green", "Blood"]),
+            ("Do you have breathlessness, wheezing, or chest pain when breathing?", "Kya saans phoolti hai, seeti ki awaaz aati hai, ya saans lete waqt seene me dard hota hai?", "क्या सांस फूलती है, सीटी की आवाज़ आती है, या सांस लेते समय सीने में दर्द होता है?", ["No", "Breathlessness", "Wheezing", "Chest pain"]),
+            ("Have you been near anyone with a similar illness, or had a recent COVID or flu contact?", "Kya kisi beemar vyakti ke sampark me aaye hain?", "क्या आप किसी बीमार व्यक्ति के संपर्क में आए हैं?", ["No", "Yes", "Not sure"]),
+        ),
+        "gastrointestinal": (
+            ("Are you having vomiting or loose stools, and how many times today?", "Kya ulti ya loose motion ho rahe hain? Aaj kitni baar?", "क्या उल्टी या दस्त हो रहे हैं? आज कितनी बार?", ["Neither", "Vomiting", "Loose stools", "Both"]),
+            ("Is there blood in the vomit or stool, or are you unable to keep fluids down?", "Kya ulti ya potty me khoon hai, ya paani bhi nahi ruk raha?", "क्या उल्टी या मल में खून है, या पानी भी नहीं रुक रहा?", ["No", "Blood", "Cannot keep fluids down", "Not sure"]),
+            ("Did this start after a particular meal, unsafe water, or contact with someone who was ill?", "Kya yeh kisi khaane, paani, ya beemar vyakti ke sampark ke baad shuru hua?", "क्या यह किसी खाने, पानी, या बीमार व्यक्ति के संपर्क के बाद शुरू हुआ?", ["No", "Food", "Water", "Contact"]),
+            ("Are you passing urine normally, or feeling very thirsty or dizzy?", "Kya peshab normal aa raha hai, ya bahut pyaas/chakkar lag rahe hain?", "क्या पेशाब सामान्य आ रहा है, या बहुत प्यास/चक्कर लग रहे हैं?", ["Normal", "Less urine", "Very thirsty", "Dizzy"]),
+        ),
+        "urinary": (
+            ("Do you have burning while passing urine, frequent urination, or an urgent need to go?", "Peshab karte waqt jalan, baar-baar peshab, ya zor se hajaat hoti hai?", "पेशाब करते समय जलन, बार-बार पेशाब, या तेज़ हाजत होती है?", ["Burning", "Frequent", "Urgency", "None"]),
+            ("Do you have fever, pain in your side or back, or blood in the urine?", "Kya bukhar, kamar/peeth ke paas dard, ya peshab me khoon hai?", "क्या बुखार, कमर/पीठ के पास दर्द, या पेशाब में खून है?", ["No", "Fever", "Side or back pain", "Blood"]),
+            ("When did these urine symptoms start, and are they getting worse?", "Peshab ki yeh takleef kab se hai, aur badh rahi hai kya?", "पेशाब की यह तकलीफ़ कब से है, और बढ़ रही है क्या?", ["Today", "A few days", "Getting worse", "Not sure"]),
+        ),
+        "headache": (
+            ("Did the headache start suddenly, or is it the worst headache you have ever had?", "Kya sir dard achanak shuru hua, ya zindagi ka sabse tez dard hai?", "क्या सिरदर्द अचानक शुरू हुआ, या जीवन का सबसे तेज़ दर्द है?", ["No", "Sudden", "Worst ever", "Not sure"]),
+            ("Do bright light or loud sounds make it worse, and do you feel nauseated?", "Kya roshni ya tez awaaz se dard badhta hai, ya ulti jaisa lagta hai?", "क्या रोशनी या तेज़ आवाज़ से दर्द बढ़ता है, या उल्टी जैसा लगता है?", ["No", "Light or sound", "Nausea", "Both"]),
+            ("Have you noticed blurred vision, weakness, numbness, or trouble speaking?", "Kya dhundhla dikhna, kamzori, sunnpan, ya bolne me dikkat hai?", "क्या धुंधला दिखना, कमजोरी, सुन्नपन, या बोलने में दिक्कत है?", ["No", "Yes", "Not sure"]),
+            ("Is this a new type of headache, or have you had similar headaches before?", "Kya yeh naya tarah ka sir dard hai, ya pehle bhi aisa hua hai?", "क्या यह नए तरह का सिरदर्द है, या पहले भी ऐसा हुआ है?", ["New", "Before", "Not sure"]),
+        ),
+    }
+    if illness:
+        illness_markers = {
+            "respiratory": ("cough", "mucus", "balgham", "breathlessness", "wheezing", "contact", "खांसी", "बलगम"),
+            "gastrointestinal": ("vomit", "loose", "stool", "blood", "fluid", "meal", "water", "ulti", "dast", "खून"),
+            "urinary": ("burning", "frequent", "urgency", "fever", "back", "blood", "peshab", "jalan", "पेशाब"),
+            "headache": ("sudden", "worst", "light", "sound", "nausea", "vision", "weakness", "new", "achanak", "roshni"),
+        }[illness]
+        asked_text = " ".join(assistant_turns)
+        unanswered = [item for item in illness_questions[illness] if not any(marker in asked_text for marker in illness_markers if marker in item[0].lower() or marker in item[1].lower() or marker in item[2].lower())]
+        if unanswered:
+            english, romanized, devanagari, options = unanswered[0]
+            question = romanized if hinglish else devanagari if hindi else english
+            return ConversationStep(next_question=question, quick_reply_options=options, is_complete=False, is_red_flag_urgent=urgent)
+
+    has_pain = any(word in combined for word in ("pain", "dard", "ache", "headache", "दर्द"))
+    has_location = any(
+        word in combined
+        for word in ("pet", "stomach", "chest", "head", "back", "leg", "arm", "throat", "पेट", "सीना", "सिर")
+    )
+    has_onset = bool(
+        re.search(r"\b(today|yesterday|hours?|days?|weeks?|months?|since|sudden|gradual|started|kab se|aaj|kal|din|hafte|mahine)\b", combined)
+    )
+    has_character = any(
+        word in combined
+        for word in ("sharp", "dull", "burning", "throbbing", "cramping", "heavy", "jal", "tez", "dhadak", "जलन")
+    )
+    has_associated = any(
+        word in combined
+        for word in ("fever", "vomit", "nausea", "dizzy", "cough", "diarrhea", "bukhar", "ulti", "chakkar", "खांसी")
+    )
+    has_medicine_answer = any(
+        word in combined
+        for word in ("medicine", "medication", "tablet", "allergy", "medicines", "dawa", "drug", "दवा", "एलर्जी")
+    )
+
+    if has_pain and not has_location:
+        question = (
+            "Dard kis jagah hai?"
+            if hinglish else "दर्द किस जगह है?"
+            if hindi else "Where exactly is the pain?"
+        )
+        options = ["Head", "Chest", "Stomach", "Back or limb"]
+    elif has_pain and not has_character:
+        question = (
+            "Dard kaisa hai—tez, dull, jalne wala, ya dhadakne wala?"
+            if hinglish else "दर्द कैसा है—तेज़, हल्का, जलने वाला, या धड़कने वाला?"
+            if hindi else "What does the pain feel like: sharp, dull, burning, or throbbing?"
+        )
+        options = ["Sharp", "Dull", "Burning", "Throbbing"]
+    elif not has_onset:
+        question = (
+            "Yeh takleef kab se hai, aur achanak shuru hui ya dheere?"
+            if hinglish else "यह तकलीफ़ कब से है, और अचानक शुरू हुई या धीरे?"
+            if hindi else "When did this problem start, and was it sudden or gradual?"
+        )
+        options = ["Today", "A few days ago", "A few weeks ago", "Not sure"]
+    elif not has_associated:
+        question = (
+            "Kya iske saath bukhar, ulti, chakkar, ya koi aur takleef hai?"
+            if hinglish else "क्या इसके साथ बुखार, उल्टी, चक्कर, या कोई और तकलीफ़ है?"
+            if hindi else "Do you also have fever, vomiting, dizziness, or another symptom?"
+        )
+        options = ["Yes", "No", "Not sure"]
+    elif not has_medicine_answer:
+        question = (
+            "Kya aap koi roz ki medicine lete hain, ya kisi medicine se allergy hai?"
+            if hinglish else "क्या आप कोई रोज़ की दवा लेते हैं, या किसी दवा से एलर्जी है?"
+            if hindi else "Do you take regular medicines, or have any medicine allergies?"
+        )
+        options = ["No medicines", "Yes", "Not sure"]
+    else:
+        return ConversationStep(
+            next_question="Thank you. I have enough information to prepare the history for the doctor.",
+            quick_reply_options=[],
+            is_complete=True,
+            is_red_flag_urgent=urgent,
+        )
+
+    return ConversationStep(
+        next_question=question,
+        quick_reply_options=options,
+        is_complete=False,
+        is_red_flag_urgent=urgent,
+    )
+
+
 GENERATE_SUMMARY_SYSTEM_PROMPT = (
     "You are a clinical history synthesis engine for MediKiosk. You will be given a "
     "patient's conversational history transcript (if a voice/touch interview was "
@@ -1583,20 +1765,7 @@ async def converse(request: ConverseRequest) -> ConversationStep:
         )
     except OpenAIError as exc:
         logger.warning("OpenAI parse failed during /converse; using local fallback conversation step: %s", exc)
-        last_turn = request.history[-1].content if request.history else ""
-        lower = last_turn.lower()
-        if any(keyword in lower for keyword in ("pain", "dard", "ache", "severe", "chest", "breathing")):
-            question = "Where exactly is the pain or discomfort, and when did it start?"
-        elif any(keyword in lower for keyword in ("fever", "temperature", "cold", "cough")):
-            question = "How long have these symptoms been present, and have you had fever or cough?"
-        else:
-            question = "Please tell me your main symptom and how long it has been happening."
-        return ConversationStep(
-            next_question=question,
-            quick_reply_options=["Yes", "No", "Not sure", "Need more time"],
-            is_complete=False,
-            is_red_flag_urgent=any(keyword in lower for keyword in ("chest pain", "breathing", "faint", "stroke", "severe", "sudden weakness")),
-        )
+        return _fallback_conversation_step(request.history)
 
     message = completion.choices[0].message
 
