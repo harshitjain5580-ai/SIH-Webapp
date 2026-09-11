@@ -39,17 +39,25 @@ def main() -> None:
     parser.add_argument("--dataset", default="bilingual_clinical_conversation_questions.xlsx")
     parser.add_argument("--output", default="training/outputs/qwen2.5-1.5b-bilingual-lora")
     parser.add_argument("--model", default="Qwen/Qwen2.5-1.5B-Instruct")
+    parser.add_argument("--device", choices=["auto", "cuda", "cpu"], default="auto")
     args = parser.parse_args()
-    if not torch.cuda.is_available():
-        raise RuntimeError("CUDA is required for 4-bit QLoRA; install a CUDA-enabled PyTorch build.")
+    if args.device == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError("CUDA was requested but is not available.")
+    device = "cuda" if args.device == "auto" and torch.cuda.is_available() else args.device
+    if device == "auto":
+        device = "cpu"
 
     frame = pd.read_excel(args.dataset, sheet_name="Training_Data").dropna(
         subset=["English question", "Hindi question (Devanagari)"]
     )
+    has_hinglish_column = "Hinglish question (Roman)" in frame.columns
     records = frame.to_dict("records")
     examples = []
     for record in records:
         safety = str(record.get("safety note", ""))
+        hinglish_question = str(record.get("Hinglish question (Roman)", "")).strip()
+        if not hinglish_question or hinglish_question.lower() == "nan":
+            hinglish_question = romanize_hindi(record["Hindi question (Devanagari)"])
         examples.extend([
             f"System: You are a safe clinical intake interviewer. Ask one question only. Never diagnose or prescribe medicine.\n"
             f"User: Continue the interview in English. Category: {record['category']}. Ask the next question.\n"
@@ -59,7 +67,7 @@ def main() -> None:
             f"Assistant: {record['Hindi question (Devanagari)']}\nSafety: {safety}",
             f"System: You are a safe clinical intake interviewer. Ask one question only. Never diagnose or prescribe medicine.\n"
             f"User: Continue the interview in Hinglish (Roman Hindi). Category: {record['category']}. Ask the next question.\n"
-            f"Assistant: {romanize_hindi(record['Hindi question (Devanagari)'])}\nSafety: {safety}",
+            f"Assistant: {hinglish_question}\nSafety: {safety}",
         ])
     dataset = Dataset.from_dict({"text": examples})
     tokenizer = AutoTokenizer.from_pretrained(args.model)
@@ -70,7 +78,9 @@ def main() -> None:
         remove_columns=["text"],
     )
     model = AutoModelForCausalLM.from_pretrained(
-        args.model, device_map={"": 0}, dtype=torch.bfloat16
+        args.model,
+        device_map={"": 0} if device == "cuda" else None,
+        dtype=torch.bfloat16 if device == "cuda" else torch.float32,
     )
     model.gradient_checkpointing_enable()
     model.add_adapter(
@@ -88,7 +98,8 @@ def main() -> None:
             per_device_train_batch_size=1,
             gradient_accumulation_steps=8,
             learning_rate=5e-5,
-            bf16=True,
+            use_cpu=device == "cpu",
+            bf16=device == "cuda",
             fp16=False,
             logging_steps=1,
             save_strategy="epoch",
@@ -108,10 +119,12 @@ def main() -> None:
             "base_model": args.model, "method": "LoRA",
             "quantization": "none (bitsandbytes 4-bit loader crashes on this Windows runtime)",
             "examples": len(examples), "source_question_pairs": len(records), "languages": ["English", "Hindi", "Hinglish"],
+            "used_source_hinglish_column": has_hinglish_column,
             "epochs": 3, "batch_size": 1,
             "gradient_accumulation_steps": 8, "learning_rate": 5e-5,
-            "gpu": torch.cuda.get_device_name(0),
-            "vram_gib": torch.cuda.get_device_properties(0).total_memory / 1024**3,
+            "device": device,
+            "gpu": torch.cuda.get_device_name(0) if device == "cuda" else None,
+            "vram_gib": torch.cuda.get_device_properties(0).total_memory / 1024**3 if device == "cuda" else None,
         }, indent=2),
         encoding="utf-8",
     )

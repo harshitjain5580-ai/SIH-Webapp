@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MediKiosk - AI Clinical History Intake & Triage Platform</title>
+  <meta name="description" content="AI-assisted clinical history intake kiosk, prescription document OCR, SOCRATES pain framework, AYUSH Dashavidha Pariksha, and triage management.">
+  
+  <!-- Google Fonts: DM Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400;1,9..40,600&display=swap" rel="stylesheet">
+  
+  <!-- Design System Stylesheet strictly adhering to DESIGN.md -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <div class="app-container">
+    
+    <!-- Sidebar Navigation -->
+    <aside class="app-sidebar" id="app-sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-icon">✚</div>
+        <div class="brand-text">
+          <h1>MediKiosk</h1>
+          <span>Clinical AI Intake</span>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section-title">Patient Intake</div>
+        
+        <button class="nav-item active" data-view="kiosk" id="nav-kiosk">
+          <span class="nav-icon">🎙️</span>
+          <span>Intake Kiosk</span>
+        </button>
+
+        <button class="nav-item" data-view="scanner" id="nav-scanner">
+          <span class="nav-icon">📄</span>
+          <span>Document OCR</span>
+        </button>
+
+        <div class="nav-section-title">Clinical Operations</div>
+
+        <button class="nav-item" data-view="triage" id="nav-triage">
+          <span class="nav-icon">🚨</span>
+          <span>Triage & Waiting Room</span>
+          <span class="badge badge-primary" id="sidebar-triage-badge">Live</span>
+        </button>
+
+        <button class="nav-item" data-view="doctor-review" id="nav-doctor-review">
+          <span class="nav-icon">🩺</span>
+          <span>Physician Review</span>
+        </button>
+
+        <button class="nav-item" data-view="training-cases" id="nav-training-cases">
+          <span class="nav-icon">📚</span>
+          <span>Case Repository</span>
+        </button>
+
+        <div class="nav-section-title">Design Ecosystem</div>
+        <a href="https://www.figma.com" target="_blank" rel="noopener noreferrer" class="nav-item" style="opacity: 0.85;">
+          <span class="nav-icon">🎨</span>
+          <span>Figma Community UI ↗</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="status-indicator">
+          <div class="status-dot" id="backend-status-dot"></div>
+          <span id="backend-status-label">Checking Backend...</span>
+        </div>
+        <div style="font-size: 0.72rem; color: var(--utd-color-textmuted); line-height: 1.3;">
+          ABDM Sandbox & FHIR Mock Ready
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <div class="app-main">
+      
+      <!-- Top Navigation Header -->
+      <header class="app-header">
+        <div class="header-left">
+          <button class="mobile-menu-btn" id="mobile-toggle-btn" aria-label="Toggle Menu">
+            ☰
+          </button>
+          <div class="header-title-group">
+            <h2 id="header-page-title">Clinical History Intake Kiosk</h2>
+            <p id="header-page-subtitle">Dual-Mode Voice & Touchscreen Patient Reception</p>
+          </div>
+        </div>
+
+        <div class="header-actions">
+          <button class="voice-master-toggle active" id="btn-toggle-voice-assistant" title="Toggle voice read-aloud assistant">
+            <span>🔊</span>
+            <span>Voice Readout</span>
+          </button>
+
+          <button class="kiosk-mode-btn" id="btn-toggle-kiosk-font" title="Toggle large text scale for elderly/low-literacy accessibility">
+            <span>👁️</span>
+            <span>Large Kiosk Text</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Global Emergency Red Flag Banner (Dynamic) -->
+      <div class="emergency-alert-banner" id="global-emergency-banner" style="display: none;">
+        <div class="emergency-alert-content">
+          <span class="emergency-icon">⚠️</span>
+          <span id="emergency-banner-text">CRITICAL ALERT: Emergency acute symptoms detected. Immediate triage required!</span>
+        </div>
+        <button class="btn btn-danger btn-sm" onclick="window.App.switchView('triage')">
+          View Triage Queue →
+        </button>
+      </div>
+
+      <!-- Main Dynamic Content Views -->
+      <main class="app-content">
+
+        <!-- ================================================================
+             VIEW 1: Patient Intake Kiosk (Dual-Mode Voice + Touch)
+             ================================================================ -->
+        <section class="view-panel active" id="view-kiosk">
+          <div class="kiosk-container">
+
+            <!-- Patient ABHA Header Card -->
+            <div class="kiosk-header-card">
+              <div class="kiosk-patient-meta">
+                <div class="kiosk-avatar">👤</div>
+                <div class="kiosk-patient-title">
+                  <h3 id="kiosk-patient-name">Walk-in Patient</h3>
+                  <p id="kiosk-patient-abha">ABHA ID: Not Verified</p>
+                </div>
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <span class="badge badge-warning" id="kiosk-patient-status">Self Intake Mode</span>
+                <button class="btn btn-secondary btn-sm" id="btn-reset-kiosk" style="color: #FFFFFF; background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.3);">
+                  🔄 New Session
+                </button>
+              </div>
+            </div>
+
+            <!-- ABHA ID Quick Verification Toolbar -->
+            <div class="card" style="padding: 16px 20px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+                <div style="flex-grow: 1; min-width: 260px;">
+                  <label class="form-label" style="margin-bottom: 4px; font-size: 0.82rem;">
+                    Ayushman Bharat Health Account (ABHA ID / Number)
+                  </label>
+                  <div style="display: flex; gap: 10px;">
+                    <input type="text" class="form-control" id="kiosk-abha-input" placeholder="e.g. 91-9876543210@abdm or priya.patel@abdm">
+                    <button class="btn btn-primary" id="btn-verify-abha">Verify ABHA</button>
+                  </div>
+                </div>
+
+                <div>
+                  <span style="font-size: 0.78rem; color: var(--utd-color-textmuted); display: block; margin-bottom: 4px;">Quick Sample Patients:</span>
+                  <div style="display: flex; gap: 6px;">
+                    <button class="sample-chip sample-abha-btn" data-abha="priya.patel@abdm">Priya (F/34)</button>
+                    <button class="sample-chip sample-abha-btn" data-abha="vikram.singh@abdm">Vikram (M/52)</button>
+                    <button class="sample-chip sample-abha-btn" data-abha="ananya.das@abdm">Ananya (F/28)</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Grid: Interactive Interview Stream + Clinical Tracking Framework -->
+            <div class="grid-sidebar-layout">
+              
+              <!-- Left Column: Conversational Chat & Input Dock -->
+              <div style="display: flex; flex-direction: column; gap: 16px;">
+                
+                <!-- Chat Transcript Box -->
+                <div class="kiosk-chat-box" id="kiosk-chat-stream">
+                  <!-- Dynamic Turns Populated by JS -->
+                </div>
+
+                <!-- Quick-Reply Tap Options (Touchscreen Accessibility) -->
+                <div>
+                  <span style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--utd-color-textmuted); letter-spacing: 0.05em;">
+                    Touch Quick-Answers (त्वरित उत्तर):
+                  </span>
+                  <div class="quick-replies-container" id="kiosk-quick-replies">
+                    <!-- Populated dynamically by kiosk.js -->
+                  </div>
+                </div>
+
+                <!-- Dual-Mode Input Dock (Speech + Keyboard) -->
+                <div class="kiosk-input-dock">
+                  <div class="kiosk-input-controls">
+                    
+                    <!-- Voice Microphone Button -->
+                    <button class="mic-action-btn" id="kiosk-mic-btn" title="Speak to MediKiosk (Click to record voice in Hindi/English/Hinglish)">
+                      🎤
+                    </button>
+
+                    <!-- Text Field -->
+                    <input type="text" class="kiosk-text-input" id="kiosk-text-input" placeholder="Speak or type symptoms (बोलें या लिखें)...">
+
+                    <!-- Send Button -->
+                    <button class="btn btn-primary btn-lg" id="kiosk-send-btn">
+                      Send →
+                    </button>
+                  </div>
+
+                  <!-- Audio Waveform Pulse Bar -->
+                  <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <div class="voice-wave-container" id="kiosk-voice-wave">
+                      <div class="wave-bar"></div>
+                      <div class="wave-bar"></div>
+                      <div class="wave-bar"></div>
+                      <div class="wave-bar"></div>
+                      <div class="wave-bar"></div>
+                      <span style="font-size: 0.78rem; color: var(--utd-color-textmuted); margin-left: 8px;">
+                        Dual-Mode: Speech Recognition & Large Touch Controls
+                      </span>
+                    </div>
+
+                    <button class="btn btn-primary btn-sm" id="btn-finish-kiosk" style="display: none;">
+                      ✨ Compile & Review Summary
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+
+              <!-- Right Column: Live Clinical Assessment Tracking -->
+              <div style="display: flex; flex-direction: column; gap: 16px;">
+                
+                <!-- SOCRATES Pain Framework Tracker -->
+                <div class="card">
+                  <div class="card-header">
+                    <h3 class="card-title">
+                      <span>🩺</span>
+                      <span>SOCRATES Pain Matrix</span>
+                    </h3>
+                  </div>
+                  <div class="card-body">
+                    <p style="font-size: 0.8rem; color: var(--utd-color-textmuted); margin-bottom: 12px;">
+                      Real-time extraction of clinical symptom characteristics:
+                    </p>
+                    <div class="clinical-tracker-grid">
+                      <div class="tracker-badge-item" id="soc-site">Site (स्थान)</div>
+                      <div class="tracker-badge-item" id="soc-onset">Onset (शुरुआत)</div>
+                      <div class="tracker-badge-item" id="soc-character">Character (लक्षण)</div>
+                      <div class="tracker-badge-item" id="soc-radiation">Radiation (फैलाव)</div>
+                      <div class="tracker-badge-item" id="soc-associated">Associated (अन्य)</div>
+                      <div class="tracker-badge-item" id="soc-timing">Timing (समय)</div>
+                      <div class="tracker-badge-item" id="soc-exacerbating">Exacerbating (बढ़ना)</div>
+                      <div class="tracker-badge-item" id="soc-severity">Severity (गंभीरता)</div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- AYUSH Dashavidha Pariksha Matrix -->
+                <div class="card">
+                  <div class="card-header">
+                    <h3 class="card-title">
+                      <span>🌿</span>
+                      <span>AYUSH Pariksha</span>
+                    </h3>
+                  </div>
+                  <div class="card-body">
+                    <p style="font-size: 0.8rem; color: var(--utd-color-textmuted); margin-bottom: 12px;">
+                      Dashavidha tenfold constitutional assessment:
+                    </p>
+                    <div style="display: flex; flex-direction: column; gap: 8px; font-size: 0.85rem;">
+                      <div style="display: flex; justify-content: space-between; padding: 6px 10px; background: #F4FAF6; border-radius: var(--utd-border-radius);">
+                        <strong>Prakriti (Constitution):</strong>
+                        <span class="badge badge-primary">Pitta-Vata</span>
+                      </div>
+                      <div style="display: flex; justify-content: space-between; padding: 6px 10px; background: #F4FAF6; border-radius: var(--utd-border-radius);">
+                        <strong>Vikriti (Imbalance):</strong>
+                        <span style="color: var(--utd-color-textprimary); font-weight: 500;">Assessing...</span>
+                      </div>
+                      <div style="display: flex; justify-content: space-between; padding: 6px 10px; background: #F4FAF6; border-radius: var(--utd-border-radius);">
+                        <strong>Ahara Shakti (Agni):</strong>
+                        <span style="color: var(--utd-color-textprimary); font-weight: 500;">Manda Agni</span>
+                      </div>
+                      <div style="display: flex; justify-content: space-between; padding: 6px 10px; background: #F4FAF6; border-radius: var(--utd-border-radius);">
+                        <strong>Sattva (Mental Resilience):</strong>
+                        <span style="color: var(--utd-color-textprimary); font-weight: 500;">Madhyama</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+        </section>
+
+
+        <!-- ================================================================
+             VIEW 2: Medical Document & Prescription Scanner (OCR)
+             ================================================================ -->
+        <section class="view-panel" id="view-scanner">
+          <div style="display: flex; flex-direction: column; gap: 24px;">
+
+            <!-- Header Description -->
+            <div class="card" style="padding: 24px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
+                <div>
+                  <h3 style="font-size: 1.25rem; font-weight: 700; color: var(--utd-color-textprimary);">
+                    Medical Document & Prescription Scanner
+                  </h3>
+                  <p style="font-size: 0.88rem; color: var(--utd-color-textmuted); margin-top: 4px;">
+                    Upload previous prescriptions, lab reports, or discharge summaries for multimodal structured clinical extraction.
+                  </p>
+                </div>
+                <span class="badge badge-primary">GPT-4o Vision OCR Engine</span>
+              </div>
+            </div>
+
+            <!-- Upload Dropzone -->
+            <div class="dropzone-container" id="scanner-dropzone">
+              <input type="file" id="scanner-file-input" style="display: none;" accept="image/*,.pdf">
+              <div class="dropzone-icon">📷</div>
+              <div class="dropzone-title">Click or Drag & Drop Prescription or Lab Report</div>
+              <div class="dropzone-subtitle">Supports JPG, PNG, WEBP, and scanned document images</div>
+              
+              <button type="button" class="btn btn-primary" style="pointer-events: none;">
+                Browse Files
+              </button>
+
+              <div class="sample-doc-chips">
+                <span style="font-size: 0.8rem; color: var(--utd-color-textmuted); align-self: center;">Try Sample Document:</span>
+                <button type="button" class="sample-chip" data-sample="blood_report">🔬 Blood Lab Report</button>
+                <button type="button" class="sample-chip" data-sample="prescription">💊 Doctor Prescription</button>
+                <button type="button" class="sample-chip" data-sample="chest_xray">🩻 Chest Investigation</button>
+              </div>
+            </div>
+
+            <!-- Empty State Placeholder -->
+            <div id="scanner-empty-state" class="card" style="padding: 40px; text-align: center; color: var(--utd-color-textmuted);">
+              <div style="font-size: 32px; margin-bottom: 8px;">📑</div>
+              <p>No document uploaded yet. Upload a prescription or select a sample above to view structured extractions.</p>
+            </div>
+
+            <!-- Extracted Findings Preview -->
+            <div id="scanner-results-container" style="display: none;">
+              
+              <div class="card">
+                <div class="card-header">
+                  <div class="card-title">
+                    <span>✨</span>
+                    <span>Extracted Clinical Findings: <span id="scanned-file-name" style="font-weight: 500; font-size: 0.95rem; color: var(--utd-color-link);"></span></span>
+                  </div>
+                  <button class="btn btn-primary btn-sm" id="btn-merge-scanned-doc">
+                    Merge with Intake Record →
+                  </button>
+                </div>
+
+                <div class="card-body" style="display: flex; flex-direction: column; gap: 20px;">
+                  
+                  <!-- Extracted Diagnoses -->
+                  <div>
+                    <h4 style="font-size: 0.9rem; font-weight: 700; color: var(--utd-color-textsecondary); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em;">
+                      Identified Diagnoses & Conditions
+                    </h4>
+                    <div id="scanned-diagnoses-list" style="display: flex; gap: 8px; flex-wrap: wrap;"></div>
+                  </div>
+
+                  <!-- Lab Investigations with Abnormal Badges -->
+                  <div>
+                    <h4 style="font-size: 0.9rem; font-weight: 700; color: var(--utd-color-textsecondary); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em;">
+                      Laboratory & Imaging Investigations
+                    </h4>
+                    <div style="border: 1px solid var(--utd-color-border); border-radius: var(--utd-border-radius); overflow: hidden;">
+                      <table class="findings-table">
+                        <thead>
+                          <tr>
+                            <th>Investigation / Test Name</th>
+                            <th>Measured Value</th>
+                            <th>Reference Range</th>
+                            <th>Status Flag</th>
+                          </tr>
+                        </thead>
+                        <tbody id="scanned-investigations-tbody"></tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <!-- Prescribed Medications -->
+                  <div>
+                    <h4 style="font-size: 0.9rem; font-weight: 700; color: var(--utd-color-textsecondary); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em;">
+                      Prescribed Medications
+                    </h4>
+                    <div style="border: 1px solid var(--utd-color-border); border-radius: var(--utd-border-radius); overflow: hidden;">
+                      <table class="findings-table">
+                        <thead>
+                          <tr>
+                            <th>Medication Name</th>
+                            <th>Dosage</th>
+                            <th>Frequency</th>
+                          </tr>
+                        </thead>
+                        <tbody id="scanned-medications-tbody"></tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <!-- Procedures -->
+                  <div>
+                    <h4 style="font-size: 0.9rem; font-weight: 700; color: var(--utd-color-textsecondary); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em;">
+                      Mentioned Procedures & Surgeries
+                    </h4>
+                    <div id="scanned-procedures-list" style="display: flex; gap: 8px; flex-wrap: wrap;"></div>
+                  </div>
+
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+        </section>
+
+
+        <!-- ================================================================
+             VIEW 3: Triage Waiting Room & Priority Alerts
+             ================================================================ -->
+        <section class="view-panel" id="view-triage">
+          <div style="display: flex; flex-direction: column; gap: 24px;">
+
+            <!-- Stat Metric Cards -->
+            <div class="grid-4">
+              
+              <div class="stat-card">
+                <div class="stat-icon-wrapper">👥</div>
+                <div class="stat-info">
+                  <h3 id="stat-total-intake">3</h3>
+                  <p>Total Patients</p>
+                </div>
+              </div>
+
+              <div class="stat-card">
+                <div class="stat-icon-wrapper danger">🚨</div>
+                <div class="stat-info">
+                  <h3 id="stat-red-flags" style="color: var(--utd-color-danger);">1</h3>
+                  <p>Red-Flag Alerts</p>
+                </div>
+              </div>
+
+              <div class="stat-card">
+                <div class="stat-icon-wrapper">⏱️</div>
+                <div class="stat-info">
+                  <h3 id="stat-standard-queue">2</h3>
+                  <p>Standard Queue</p>
+                </div>
+              </div>
+
+              <div class="stat-card">
+                <div class="stat-icon-wrapper">🌿</div>
+                <div class="stat-info">
+                  <h3 id="stat-ayush-count">3</h3>
+                  <p>AYUSH Assessed</p>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Priority Emergency Alerts Panel -->
+            <div id="priority-alerts-panel" style="display: none;">
+              <div class="card" style="border-left: 4px solid var(--utd-color-danger);">
+                <div class="card-header" style="background: #FEF2F2;">
+                  <h3 class="card-title" style="color: #991B1B;">
+                    <span>🚨</span>
+                    <span>Urgent Emergency Symptoms Awaiting Triage Staff Acknowledgment</span>
+                  </h3>
+                </div>
+                <div class="card-body" id="priority-alerts-list">
+                  <!-- Rendered dynamically -->
+                </div>
+              </div>
+            </div>
+
+            <!-- Real-Time Waiting Room Queue Table -->
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title">
+                  <span>📋</span>
+                  <span>Live Patient Intake Queue (Waiting Room)</span>
+                </h3>
+                <button class="btn btn-secondary btn-sm" id="btn-refresh-triage">
+                  🔄 Refresh Queue
+                </button>
+              </div>
+
+              <div class="card-body" style="padding: 16px;">
+                <div style="overflow-x: auto;">
+                  <table class="triage-queue-table">
+                    <thead>
+                      <tr>
+                        <th>Intake Time</th>
+                        <th>Patient / ABHA ID</th>
+                        <th>Chief Complaint</th>
+                        <th>Triage Priority</th>
+                        <th>AYUSH Constitution</th>
+                        <th style="text-align: right;">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="triage-queue-tbody">
+                      <!-- Dynamically rendered -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+
+        <!-- ================================================================
+             VIEW 4: Physician Review & HIS Push Dashboard
+             ================================================================ -->
+        <section class="view-panel" id="view-doctor-review">
+          <div style="display: flex; flex-direction: column; gap: 24px;">
+
+            <!-- Header Card with Patient Identity & ABHA Link -->
+            <div class="card" style="padding: 20px 24px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
+                <div>
+                  <div style="display: flex; align-items: center; gap: 12px;">
+                    <h3 id="doctor-patient-name" style="font-size: 1.35rem; font-weight: 700; color: var(--utd-color-textprimary);">
+                      Rajesh Kumar
+                    </h3>
+                    <span class="badge badge-danger" id="doctor-redflag-status">🚨 RED FLAG DETECTED</span>
+                  </div>
+                  <p id="doctor-patient-abha" style="font-size: 0.85rem; color: var(--utd-color-textmuted); margin-top: 4px;">
+                    ID: d9b23f81-54c7... | ABHA: rajesh.kumar@abdm
+                  </p>
+                </div>
+
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                  <button class="btn btn-secondary" id="btn-save-physician-edits">
+                    💾 Save Amendments
+                  </button>
+                  <button class="btn btn-primary" id="btn-push-to-his">
+                    🚀 Push to HIS / ABHA PHR →
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Review Editor Card -->
+            <div class="review-editor-card">
+              
+              <!-- Chief Complaint -->
+              <div class="form-group">
+                <label class="form-label" for="doc-chief-complaint">
+                  Primary Chief Complaint (1-2 sentences)
+                </label>
+                <input type="text" class="form-control" id="doc-chief-complaint" style="font-weight: 600;">
+              </div>
+
+              <!-- HPI SOCRATES Narrative -->
+              <div class="form-group">
+                <label class="form-label" for="doc-hpi-socrates">
+                  History of Present Illness (SOCRATES Framework Narrative)
+                </label>
+                <textarea class="form-control" id="doc-hpi-socrates" style="min-height: 120px; font-family: var(--utd-font-family); line-height: 1.6;"></textarea>
+              </div>
+
+              <!-- Past Medical History -->
+              <div class="clinical-section-block">
+                <div class="clinical-section-header">
+                  <span>Past Medical History</span>
+                </div>
+                <div id="doc-past-history-list" style="display: flex; gap: 8px; flex-wrap: wrap;"></div>
+              </div>
+
+              <!-- Current Medications (Editable) -->
+              <div class="clinical-section-block">
+                <div class="clinical-section-header">
+                  <span>Current Medications (Patient Reported / Scanned)</span>
+                  <button type="button" class="btn btn-secondary btn-sm" id="btn-add-medication-row">
+                    + Add Medication
+                  </button>
+                </div>
+                <div id="doc-medications-list" style="margin-top: 8px;">
+                  <!-- Dynamic Med Rows -->
+                </div>
+              </div>
+
+              <!-- AYUSH Dashavidha Pariksha 10-fold Matrix -->
+              <div class="clinical-section-block">
+                <div class="clinical-section-header">
+                  <span>AYUSH Dashavidha Pariksha (Tenfold Examination Parameters)</span>
+                </div>
+                <div class="ayush-param-grid" id="doc-ayush-parameters-grid">
+                  <!-- Dynamically populated -->
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+        </section>
+
+
+        <!-- ================================================================
+             VIEW 5: Curated Training Cases & Doctor Sandbox
+             ================================================================ -->
+        <section class="view-panel" id="view-training-cases">
+          <div style="display: flex; flex-direction: column; gap: 24px;">
+            
+            <div class="card" style="padding: 24px;">
+              <h3 style="font-size: 1.25rem; font-weight: 700; color: var(--utd-color-textprimary);">
+                Doctor-Reviewed Case Repository & Fine-Tuning Sandbox
+              </h3>
+              <p style="font-size: 0.88rem; color: var(--utd-color-textmuted); margin-top: 4px;">
+                Curated clinical cases approved by physicians to refine Qwen-2.5 local bilingual clinical history intake models.
+              </p>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title">
+                  <span>📚</span>
+                  <span>Approved Clinical Training Cases</span>
+                </h3>
+              </div>
+              <div class="card-body">
+                <div style="display: flex; flex-direction: column; gap: 14px;">
+                  
+                  <div style="padding: 16px; background: #FAFCFA; border: 1px solid var(--utd-color-border); border-radius: var(--utd-border-radius);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                      <strong>CASE #TC-8891 — Cardiology / Angina Pectoris</strong>
+                      <span class="badge badge-success">Doctor Approved</span>
+                    </div>
+                    <p style="font-size: 0.88rem; color: var(--utd-color-textsecondary);">
+                      Patient presented with retrosternal pressure radiating to jaw. Model successfully extracted all 8 SOCRATES parameters and flagged emergency red flag within 2 dialogue turns.
+                    </p>
+                    <div style="margin-top: 8px; display: flex; gap: 6px;">
+                      <span class="badge badge-primary">Qwen-2.5-1.5B</span>
+                      <span class="badge badge-warning">Bilingual (Hindi/English)</span>
+                    </div>
+                  </div>
+
+                  <div style="padding: 16px; background: #FAFCFA; border: 1px solid var(--utd-color-border); border-radius: var(--utd-border-radius);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                      <strong>CASE #TC-8892 — Gastroenterology / Amlapitta</strong>
+                      <span class="badge badge-success">Doctor Approved</span>
+                    </div>
+                    <p style="font-size: 0.88rem; color: var(--utd-color-textsecondary);">
+                      Chronic acid peptic symptoms mapped to Pitta-Kaphaja Vikriti with Ahara Shakti assessment and dietary trigger correlation.
+                    </p>
+                    <div style="margin-top: 8px; display: flex; gap: 6px;">
+                      <span class="badge badge-primary">AYUSH Dashavidha</span>
+                      <span class="badge badge-primary">Standard Triage</span>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- Modal: Hospital Information System (HIS) / ABHA PHR Push Success -->
+  <div class="modal-overlay" id="his-success-modal">
+    <div class="modal-card">
+      <div class="card-header">
+        <h3 class="card-title" style="color: var(--utd-color-primary);">
+          <span>✅</span>
+          <span>Hospital Information System (HIS) Push Confirmed</span>
+        </h3>
+      </div>
+      <div class="card-body">
+        <div id="his-modal-details"></div>
+      </div>
+      <div class="card-footer" style="justify-content: flex-end;">
+        <button class="btn btn-primary" id="btn-close-his-modal">
+          Done
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Global Toast Notifications Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Main JavaScript Bundle (ES Modules) -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
