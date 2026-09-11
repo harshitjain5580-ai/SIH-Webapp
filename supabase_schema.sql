@@ -22,13 +22,14 @@ create extension if not exists "pgcrypto";
 -- Table: patient_histories
 -- ---------------------------------------------------------------------------
 create table if not exists public.patient_histories (
-    id                   uuid primary key default gen_random_uuid(),
-    created_at           timestamptz not null default now(),
-    chief_complaint      text not null,
-    hpi_socrates         text not null,
-    current_medications  jsonb not null default '[]'::jsonb,
-    ayush_parameters     jsonb not null default '{}'::jsonb,
-    red_flags_detected   boolean not null default false
+    id                    uuid primary key default gen_random_uuid(),
+    created_at            timestamptz not null default now(),
+    chief_complaint       text not null,
+    hpi_socrates          text not null,
+    past_medical_history  jsonb not null default '[]'::jsonb,
+    current_medications   jsonb not null default '[]'::jsonb,
+    ayush_parameters      jsonb not null default '{}'::jsonb,
+    red_flags_detected    boolean not null default false
 );
 
 create table if not exists public.patient_profiles (
@@ -69,6 +70,11 @@ create table if not exists public.patient_reports (
 -- Added for the physician edit/confirm workflow and red-flag triage alerts.
 alter table public.patient_histories
     add column if not exists alert_acknowledged boolean not null default false;
+
+-- Added: past_medical_history was being extracted by the LLM but silently
+-- dropped on every save path because this column didn't exist yet.
+alter table public.patient_histories
+    add column if not exists past_medical_history jsonb not null default '[]'::jsonb;
 
 -- ---------------------------------------------------------------------------
 -- Row Level Security: patient_histories
