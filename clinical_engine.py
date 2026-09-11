@@ -11,8 +11,10 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 
 RED_FLAG_PATTERN = re.compile(
-    r"(chest pain|heart|breathing|breathless|faint|unconscious|stroke|paralysis|"
-    r"crushing pain|severe pressure|blood|dizziness|सीने में दर्द|सांस फूल|बेहोश|लकवा)",
+    r"(chest\s*(pain|discomfort|tightness|heaviness|pressure|squeezing)|"
+    r"heart|breathing|breathless|shortness of breath|faint|unconscious|stroke|paralysis|"
+    r"crushing pain|severe pressure|blood|dizziness|"
+    r"सीने\s*(में)?\s*(दर्द|भारीपन|जकड़न|दबाव)|सांस फूल|बेहोश|लकवा)",
     re.IGNORECASE,
 )
 
