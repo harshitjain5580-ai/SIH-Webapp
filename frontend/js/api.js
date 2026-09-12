@@ -186,6 +186,7 @@ export const ApiService = {
 
     // Red flag trigger detection
     const isRedFlag = /(chest pain|heart|breathing|breathless|faint|unconscious|stroke|paralysis|crushing pain|blood|dizziness|सीने में दर्द|सांस फूल)/i.test(lastPatientMessage);
+    const isRedFlag = /(chest\s*(pain|discomfort|tightness|heaviness|pressure|squeezing)|heart|breathing|breathless|shortness of breath|faint|unconscious|stroke|paralysis|crushing pain|blood|dizziness|सीने\s*(में)?\s*(दर्द|भारीपन|जकड़न|दबाव)|सांस फूल)/i.test(lastPatientMessage);
 
     if (turnCount === 0) {
       return {
@@ -346,6 +347,7 @@ export const ApiService = {
     // Local summary compilation
     const lowerTrans = (transcript || '').toLowerCase();
     const isUrgent = /(chest pain|heart|breathing|breathless|faint|unconscious|stroke|सीने)/i.test(lowerTrans);
+    const isUrgent = /(chest\s*(pain|discomfort|tightness|heaviness|pressure)|heart|breathing|breathless|shortness of breath|faint|unconscious|stroke|सीने)/i.test(lowerTrans);
 
     const newRecord = {
       id: 'uuid-' + Math.random().toString(36).substring(2, 11) + '-' + Date.now().toString(36),
@@ -517,6 +519,7 @@ export const ApiService = {
       history_id: historyId,
       abha_id: abhaId,
       his_record_id: 'HOSP-' + Math.floor(100000 + Math.random() * 900000),
+      his_record_id: 'HIS-FHIR-' + Math.floor(100000 + Math.random() * 900000),
       status: 'submitted',
       timestamp: new Date().toISOString()
     };

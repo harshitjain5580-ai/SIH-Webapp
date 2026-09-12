@@ -97,6 +97,8 @@ export const VoiceEngine = {
     if (!this.recognition) {
       this.startMediaRecorder();
       return true;
+      alert('Speech recognition is not supported on this browser. Please use the touch buttons or keyboard.');
+      return false;
     }
 
     if (this.isListening) {

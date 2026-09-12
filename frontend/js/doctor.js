@@ -41,6 +41,7 @@ export const DoctorModule = {
     const record = await ApiService.getPatientHistory(recordId);
     if (!record) {
       window.App.showToast('This patient record is not available right now.', 'danger');
+      window.App.showToast('Record not found', 'danger');
       return;
     }
 
@@ -195,6 +196,9 @@ export const DoctorModule = {
             <p><strong>Hospital record reference:</strong> <code>${result.his_record_id}</code></p>
             <p><strong>Linked ABHA ID:</strong> ${result.abha_id}</p>
             <p><strong>Record submission status:</strong> <span class="badge badge-success">${result.status.toUpperCase()}</span></p>
+            <p><strong>HIS Record ID:</strong> <code>${result.his_record_id}</code></p>
+            <p><strong>Linked ABHA ID:</strong> ${result.abha_id}</p>
+            <p><strong>FHIR Submission Status:</strong> <span class="badge badge-success">${result.status.toUpperCase()}</span></p>
             <p><strong>Timestamp:</strong> ${new Date().toLocaleString()}</p>
           </div>
           <p style="font-size:0.9rem; color:var(--utd-color-textsecondary);">

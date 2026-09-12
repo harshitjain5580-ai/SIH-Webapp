@@ -5,6 +5,7 @@
 import { ApiService } from './api.js';
 import { VoiceEngine } from './voice.js';
 import { KioskModule } from './kiosk.js?v=20260912';
+import { KioskModule } from './kiosk.js';
 import { ScannerModule } from './scanner.js';
 import { TriageModule } from './triage.js';
 import { DoctorModule } from './doctor.js';
@@ -66,6 +67,7 @@ export const App = {
         VoiceEngine.ttsEnabled = !VoiceEngine.ttsEnabled;
         voiceToggleBtn.classList.toggle('active', VoiceEngine.ttsEnabled);
         this.showToast(VoiceEngine.ttsEnabled ? 'Charaka voice enabled' : 'Charaka voice muted', 'info');
+        this.showToast(VoiceEngine.ttsEnabled ? 'Voice Assistant Enabled' : 'Voice Assistant Muted', 'info');
       });
     }
   },
@@ -82,6 +84,10 @@ export const App = {
       } else {
         dot.className = 'status-dot offline';
         label.textContent = 'Offline mode';
+        label.textContent = 'Backend: Connected (FastAPI)';
+      } else {
+        dot.className = 'status-dot offline';
+        label.textContent = 'Backend: Local Client Mode';
       }
     }
   },
@@ -139,6 +145,7 @@ export const App = {
     const messageSpan = document.createElement('span');
     messageSpan.textContent = message;
     toast.append(iconSpan, document.createTextNode(' '), messageSpan);
+    toast.innerHTML = `<span>${icon}</span> <span>${message}</span>`;
 
     container.appendChild(toast);
 
