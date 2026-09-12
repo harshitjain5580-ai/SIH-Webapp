@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MediKiosk - AI Clinical History Intake & Triage Platform</title>
-  <meta name="description" content="AI-assisted clinical history intake kiosk, prescription document OCR, SOCRATES pain framework, AYUSH Dashavidha Pariksha, and triage management.">
+  <title>MediKiosk - Charaka AI Clinical History Assistant</title>
+  <meta name="description" content="Charaka AI-assisted clinical history intake kiosk, prescription document OCR, SOCRATES pain framework, AYUSH Dashavidha Pariksha, and triage management.">
   
   <!-- Google Fonts: DM Sans -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -12,7 +12,7 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400;1,9..40,600&display=swap" rel="stylesheet">
   
   <!-- Design System Stylesheet strictly adhering to DESIGN.md -->
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=20260912">
 </head>
 <body>
 
@@ -24,7 +24,7 @@
         <div class="brand-icon">✚</div>
         <div class="brand-text">
           <h1>MediKiosk</h1>
-          <span>Clinical AI Intake</span>
+          <span>Charaka AI Assistant</span>
         </div>
       </div>
 
@@ -93,7 +93,7 @@
         </div>
 
         <div class="header-actions">
-          <button class="voice-master-toggle active" id="btn-toggle-voice-assistant" title="Toggle voice read-aloud assistant">
+          <button class="voice-master-toggle active" id="btn-toggle-voice-assistant" title="Toggle Charaka voice read-aloud assistant">
             <span>🔊</span>
             <span>Voice Readout</span>
           </button>
@@ -177,7 +177,7 @@
                 <div class="gender-selection-card" id="kiosk-gender-selection">
                   <div>
                     <h3>Before we begin</h3>
-                    <p>Please select the gender you identify with. This helps the assistant ask relevant health questions.</p>
+                    <p>Please select the gender you identify with. This helps Charaka ask relevant health questions.</p>
                   </div>
                   <div class="gender-options" role="group" aria-label="Gender selection">
                     <button type="button" class="gender-option-btn" data-gender="Male">Male</button>
@@ -204,7 +204,7 @@
                   <div class="kiosk-input-controls">
                     
                     <!-- Voice Microphone Button -->
-                    <button class="mic-action-btn" id="kiosk-mic-btn" title="Speak to MediKiosk (Click to record voice in Hindi/English/Hinglish)">
+                    <button class="mic-action-btn" id="kiosk-mic-btn" title="Speak to Charaka (Click to record voice in Hindi/English/Hinglish)">
                       🎤
                     </button>
 
@@ -650,7 +650,7 @@
                       Patient presented with retrosternal pressure radiating to jaw. Model successfully extracted all 8 SOCRATES parameters and flagged emergency red flag within 2 dialogue turns.
                     </p>
                     <div style="margin-top: 8px; display: flex; gap: 6px;">
-                      <span class="badge badge-primary">Clinical language assistant</span>
+                      <span class="badge badge-primary">Charaka AI Assistant</span>
                       <span class="badge badge-warning">Bilingual (Hindi/English)</span>
                     </div>
                   </div>
@@ -704,6 +704,6 @@
   <div class="toast-container" id="toast-container"></div>
 
   <!-- Main JavaScript Bundle (ES Modules) -->
-  <script type="module" src="js/app.js?v=20260908"></script>
+  <script type="module" src="js/app.js?v=20260912"></script>
 </body>
 </html>

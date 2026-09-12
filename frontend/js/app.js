@@ -4,7 +4,7 @@
 
 import { ApiService } from './api.js';
 import { VoiceEngine } from './voice.js';
-import { KioskModule } from './kiosk.js';
+import { KioskModule } from './kiosk.js?v=20260912';
 import { ScannerModule } from './scanner.js';
 import { TriageModule } from './triage.js';
 import { DoctorModule } from './doctor.js';
@@ -65,7 +65,7 @@ export const App = {
       voiceToggleBtn.addEventListener('click', () => {
         VoiceEngine.ttsEnabled = !VoiceEngine.ttsEnabled;
         voiceToggleBtn.classList.toggle('active', VoiceEngine.ttsEnabled);
-        this.showToast(VoiceEngine.ttsEnabled ? 'Voice Assistant Enabled' : 'Voice Assistant Muted', 'info');
+        this.showToast(VoiceEngine.ttsEnabled ? 'Charaka voice enabled' : 'Charaka voice muted', 'info');
       });
     }
   },

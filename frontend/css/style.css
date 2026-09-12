@@ -860,6 +860,14 @@ textarea.form-control {
 }
 
 .chat-turn.assistant .turn-avatar {
+  width: auto;
+  min-width: 84px;
+  height: 44px;
+  padding: 0 12px;
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+  box-sizing: border-box;
   background: var(--utd-color-primary-light);
   color: var(--utd-color-primary);
   border: 1px solid var(--utd-color-border);

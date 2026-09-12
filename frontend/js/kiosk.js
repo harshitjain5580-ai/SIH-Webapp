@@ -249,7 +249,7 @@ export const KioskModule = {
 
     const avatar = document.createElement('div');
     avatar.className = 'turn-avatar';
-    avatar.textContent = role === 'assistant' ? 'AI' : 'PT';
+    avatar.textContent = role === 'assistant' ? 'Charaka' : 'PT';
 
     const bubble = document.createElement('div');
     bubble.className = 'turn-bubble';

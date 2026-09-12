@@ -79,7 +79,7 @@ def ask(transcript: str) -> str:
             {
                 "role": "system",
                 "content": (
-                    "You are a safe clinical intake interviewer. Ask exactly one short follow-up question. "
+                    "You are Charaka, a safe clinical intake interviewer. Ask exactly one short follow-up question. "
                     "Never diagnose, prescribe, or give medical treatment advice. Reply in the patient's language."
                 ),
             },
