@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MediKiosk - AI Clinical History Intake & Triage Platform</title>
   <meta name="description" content="AI-assisted clinical history intake kiosk, prescription document OCR, SOCRATES pain framework, AYUSH Dashavidha Pariksha, and triage management.">
-  
+
   <!-- Google Fonts: DM Sans -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400;1,9..40,600&display=swap" rel="stylesheet">
-  
+
   <!-- Design System Stylesheet strictly adhering to DESIGN.md -->
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=20260912">
 </head>
 <body>
 
@@ -259,6 +259,19 @@
                 <button class="btn btn-secondary btn-sm" id="btn-reset-kiosk" style="color: #FFFFFF; background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.3);">
                   🔄 New Session
                 </button>
+              </div>
+            </div>
+
+            <!-- Gender pre-step: asked once at the start of every session -->
+            <div class="gender-selection-card" id="kiosk-gender-selection">
+              <div>
+                <h3>Before we begin</h3>
+                <p>Please select the gender you identify with. This helps ask relevant health questions.</p>
+              </div>
+              <div class="gender-options" role="group" aria-label="Gender selection">
+                <button type="button" class="gender-option-btn" data-gender="Male">Male</button>
+                <button type="button" class="gender-option-btn" data-gender="Female">Female</button>
+                <button type="button" class="gender-option-btn" data-gender="Other or prefer not to say">Other / Prefer not to say</button>
               </div>
             </div>
 
@@ -772,6 +785,6 @@
   <div class="toast-container" id="toast-container"></div>
 
   <!-- Main JavaScript Bundle (ES Modules) -->
-  <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/app.js?v=20260912"></script>
 </body>
 </html>

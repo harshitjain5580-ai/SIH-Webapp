@@ -139,7 +139,11 @@ export const App = {
     toast.className = `toast toast-${type}`;
 
     const icon = type === 'success' ? '✓' : (type === 'danger' ? '⚠️' : 'ℹ️');
-    toast.innerHTML = `<span>${icon}</span> <span>${message}</span>`;
+    const iconSpan = document.createElement('span');
+    iconSpan.textContent = icon;
+    const messageSpan = document.createElement('span');
+    messageSpan.textContent = message;
+    toast.append(iconSpan, document.createTextNode(' '), messageSpan);
 
     container.appendChild(toast);
 

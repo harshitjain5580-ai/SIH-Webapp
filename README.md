@@ -20,10 +20,8 @@ Full architecture rules, tech stack, and the clinical data contracts live in [`c
 - **Speech synthesis:** Local `pyttsx3`, OpenAI TTS, or configurable Bhashini
   TTS
 - **Database and storage:** Supabase PostgreSQL and Supabase Storage
-- **Frontend handoff:** Three independent frontend workstreams are documented
-  in [`FRONTEND_README.md`](FRONTEND_README.md)
-
-The backend is device-independent: web and mobile frontends call these APIs;
+The backend is device-independent: mobile and web clients can call these APIs
+without exposing the backend keys;
 the local AI models run on the backend machine.
 
 ## Getting Started
@@ -71,6 +69,14 @@ the local AI models run on the backend machine.
    python -m uvicorn main:app --host 127.0.0.1 --port 8000
    ```
    API docs available at `http://127.0.0.1:8000/docs`.
+
+7. **Run the connected frontend (optional)**
+   In a second PowerShell window:
+   ```powershell
+   python -m http.server 5500 --directory frontend
+   ```
+   Open `http://127.0.0.1:5500`. The page calls the FastAPI backend directly;
+   change the Backend URL field when the API runs on another machine or port.
 
    The AI provider defaults to OpenAI. To use Grok for the existing extraction
    endpoints, set `AI_PROVIDER=xai`,
@@ -158,10 +164,6 @@ Important: automatic self-training from every live patient interaction is not en
 For a beginner-friendly, step-by-step explanation of the dataset, tokenizer,
 fine-tuning, LoRA adapter, training settings, inference flow, and limitations,
 see [`training/README.md`](training/README.md#how-the-model-was-trained-class-10-explanation).
-
-For the three-person frontend implementation plan, screen layouts, API
-contracts, voice integration, and end-to-end acceptance test, see
-[`FRONTEND_README.md`](FRONTEND_README.md).
 
 ## Datasets and training
 

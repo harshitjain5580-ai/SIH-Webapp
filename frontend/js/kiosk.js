@@ -9,15 +9,13 @@
 import { ApiService } from './api.js';
 import { VoiceEngine } from './voice.js';
 
+// The backend's conversational fallback is bilingual and illness-adaptive
+// (see main.py's _fallback_conversation_step / tests/test_backend_smoke.py):
+// it doesn't ask a fixed, named sequence of questions, so the step count
+// here is a soft display cap rather than a guarantee, and step labels stay
+// generic rather than naming specific categories that may not apply.
 const TOTAL_STEPS = 6;
-const STEP_LABELS = [
-  'Your symptom',
-  'When & how it feels',
-  'How severe',
-  'Medicines & allergies',
-  'Appetite & sleep',
-  'Check & finish'
-];
+const STEP_LABELS = ['Question 1', 'Question 2', 'Question 3', 'Question 4', 'Question 5', 'Check & finish'];
 
 const STATIC_STRINGS = {
   en: {
@@ -74,6 +72,13 @@ export const KioskModule = {
   },
 
   bindEvents() {
+    // Gender pre-step (asked once per session, before the first question)
+    document.querySelectorAll('.gender-option-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.selectGender(btn.dataset.gender || 'Other or prefer not to say');
+      });
+    });
+
     // Layout Switch
     const layoutToggle = document.getElementById('kiosk-layout-toggle');
     if (layoutToggle) {
@@ -222,10 +227,12 @@ export const KioskModule = {
   },
 
   /**
-   * Reset the intake interview
+   * Reset the intake interview. Always re-asks gender first, matching a
+   * fresh walk-up at a public kiosk terminal.
    */
   async resetSession() {
     this.conversationHistory = [];
+    this.currentPatient.gender = '';
     this.isInterviewComplete = false;
     this.redFlagUrgent = false;
     this.chiefComplaint = null;
@@ -242,8 +249,41 @@ export const KioskModule = {
     const typeBox = document.getElementById('kiosk-typebox-a');
     if (typeBox) typeBox.hidden = true;
 
-    // Trigger initial question
+    this.showGenderSelection();
+  },
+
+  showGenderSelection() {
+    const selector = document.getElementById('kiosk-gender-selection');
+    if (selector) selector.style.display = 'flex';
+    this.setInterviewUiVisible(false);
+  },
+
+  async selectGender(gender) {
+    this.currentPatient.gender = gender;
+    const selector = document.getElementById('kiosk-gender-selection');
+    if (selector) selector.style.display = 'none';
+    this.setInterviewUiVisible(true);
+    // Gender is patient metadata, not a conversation turn: it's kept off
+    // conversationHistory so it doesn't shift the backend's turn-counting
+    // for the fixed 6-step question sequence.
     await this.fetchNextStep();
+  },
+
+  /**
+   * Show/hide the layout switch + question card, independent of the gender
+   * pre-step above it.
+   */
+  setInterviewUiVisible(visible) {
+    const layoutSwitch = document.querySelector('.kiosk-layout-switch');
+    if (layoutSwitch) layoutSwitch.style.display = visible ? 'flex' : 'none';
+    const a = document.getElementById('kiosk-layout-a');
+    const b = document.getElementById('kiosk-layout-b');
+    if (!visible) {
+      if (a) a.hidden = true;
+      if (b) b.hidden = true;
+    } else {
+      this.applyLayout();
+    }
   },
 
   /**

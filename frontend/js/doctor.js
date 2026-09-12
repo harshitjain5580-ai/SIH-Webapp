@@ -40,7 +40,7 @@ export const DoctorModule = {
     window.App.showToast('Loading clinical intake record...', 'info');
     const record = await ApiService.getPatientHistory(recordId);
     if (!record) {
-      window.App.showToast('Record not found', 'danger');
+      window.App.showToast('This patient record is not available right now.', 'danger');
       return;
     }
 
@@ -171,6 +171,8 @@ export const DoctorModule = {
       this.currentRecord = updated;
       window.App.showToast('Clinical history amendments saved successfully!', 'success');
       window.App.refreshAllData();
+    } else {
+      window.App.showToast('We could not save the changes. Please try again.', 'danger');
     }
   },
 

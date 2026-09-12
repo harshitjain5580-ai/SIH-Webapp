@@ -8,11 +8,25 @@ export const VoiceEngine = {
   isListening: false,
   ttsEnabled: true,
   audioCtx: null,
+  mediaRecorder: null,
+  mediaStream: null,
+  mediaChunks: [],
+  recorderStarting: false,
+  transcriptCallback: null,
+  stateCallback: null,
+
+  apiBase() {
+    return (window.location.protocol.startsWith('http') && (window.location.port === '8000' || window.location.port === ''))
+      ? window.location.origin
+      : (window.MEDIKIOSK_API_BASE || 'http://127.0.0.1:8000');
+  },
 
   /**
    * Initialize browser speech recognition and synthesis
    */
   init(onTranscriptCallback, onStateChangeCallback) {
+    this.transcriptCallback = onTranscriptCallback;
+    this.stateCallback = onStateChangeCallback;
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
     if (SpeechRecognition) {
@@ -47,6 +61,9 @@ export const VoiceEngine = {
         console.warn('Speech recognition notice:', event.error);
         this.isListening = false;
         if (onStateChangeCallback) onStateChangeCallback(false);
+        if (event.error === 'network' || event.error === 'service-not-allowed') {
+          this.startMediaRecorder();
+        }
       };
 
       this.recognition.onend = () => {
@@ -62,13 +79,24 @@ export const VoiceEngine = {
    * Toggle speech recognition recording
    */
   toggleListening(onTranscriptCallback, onStateChangeCallback) {
+    this.transcriptCallback = onTranscriptCallback;
+    this.stateCallback = onStateChangeCallback;
+    if (this.recorderStarting) return true;
+    if (this.mediaRecorder) {
+      this.stopMediaRecorder();
+      return false;
+    }
+    if (navigator.mediaDevices?.getUserMedia && window.MediaRecorder) {
+      this.startMediaRecorder();
+      return true;
+    }
     if (!this.recognition) {
       this.init(onTranscriptCallback, onStateChangeCallback);
     }
 
     if (!this.recognition) {
-      alert('Speech recognition is not supported on this browser. Please use the touch buttons or keyboard.');
-      return false;
+      this.startMediaRecorder();
+      return true;
     }
 
     if (this.isListening) {
@@ -85,6 +113,68 @@ export const VoiceEngine = {
         return false;
       }
     }
+  },
+
+  async startMediaRecorder() {
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+      alert('Microphone speech recognition is unavailable. Please type your answer instead.');
+      return false;
+    }
+    if (this.isListening || this.recorderStarting) return true;
+
+    try {
+      this.recorderStarting = true;
+      this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      this.mediaChunks = [];
+      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus']
+        .find((type) => MediaRecorder.isTypeSupported(type));
+      this.mediaRecorder = new MediaRecorder(this.mediaStream, mimeType ? { mimeType } : undefined);
+      this.mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size) this.mediaChunks.push(event.data);
+      };
+      this.mediaRecorder.onstop = async () => {
+        const blob = new Blob(this.mediaChunks, { type: this.mediaRecorder?.mimeType || 'audio/webm' });
+        this.mediaStream?.getTracks().forEach((track) => track.stop());
+        this.mediaStream = null;
+        this.mediaRecorder = null;
+        if (!blob.size) return;
+
+        const form = new FormData();
+        form.append('file', blob, 'patient-voice.webm');
+        try {
+          const response = await fetch(`${this.apiBase()}/voice/transcribe?language=auto`, {
+            method: 'POST',
+            body: form
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error('voice transcription unavailable');
+          if (this.transcriptCallback) this.transcriptCallback(result.text, true);
+        } catch (error) {
+          console.error('Backend microphone transcription failed:', error);
+          alert('We could not understand the recording. Please try again or type your answer.');
+        }
+      };
+      this.mediaRecorder.start();
+      this.recorderStarting = false;
+      this.isListening = true;
+      if (this.stateCallback) this.stateCallback(true);
+      return true;
+    } catch (error) {
+      console.error('Microphone permission/start failed:', error);
+      this.recorderStarting = false;
+      this.isListening = false;
+      if (this.stateCallback) this.stateCallback(false);
+      alert('Microphone permission was denied or unavailable. Please allow microphone access or type your answer.');
+      return false;
+    }
+  },
+
+  stopMediaRecorder() {
+    if (!this.mediaRecorder || this.mediaRecorder.state === 'inactive') return false;
+    this.isListening = false;
+    if (this.stateCallback) this.stateCallback(false);
+    this.mediaRecorder.stop();
+    return true;
   },
 
   /**
