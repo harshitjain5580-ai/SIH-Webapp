@@ -780,6 +780,52 @@ textarea.form-control {
   scroll-behavior: smooth;
 }
 
+.gender-selection-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding: 20px;
+  background: var(--utd-color-surface);
+  border: 1px solid var(--utd-color-border);
+  border-radius: var(--utd-border-radius);
+}
+
+.gender-selection-card h3 {
+  margin: 0 0 5px;
+  color: var(--utd-color-textprimary);
+}
+
+.gender-selection-card p {
+  margin: 0;
+  color: var(--utd-color-textmuted);
+  font-size: 0.86rem;
+}
+
+.gender-options {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.gender-option-btn {
+  border: 1px solid var(--utd-color-border);
+  border-radius: var(--utd-border-radius);
+  background: #F4FAF6;
+  color: var(--utd-color-primary);
+  padding: 11px 14px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.gender-option-btn:hover,
+.gender-option-btn:focus-visible {
+  background: var(--utd-color-primary);
+  color: #FFFFFF;
+}
+
 .chat-turn {
   display: flex;
   gap: 12px;
@@ -814,6 +860,14 @@ textarea.form-control {
 }
 
 .chat-turn.assistant .turn-avatar {
+  width: auto;
+  min-width: 84px;
+  height: 44px;
+  padding: 0 12px;
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+  box-sizing: border-box;
   background: var(--utd-color-primary-light);
   color: var(--utd-color-primary);
   border: 1px solid var(--utd-color-border);

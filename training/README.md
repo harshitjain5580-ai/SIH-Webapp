@@ -25,7 +25,7 @@ It learns examples of good questions; it does not become a doctor.
 
 | Thing | Simple meaning | What we used |
 | --- | --- | --- |
-| Dataset | Many examples used for learning | 83 English-Hindi question pairs in the Excel workbook |
+| Dataset | Many examples used for learning | Workbook questions plus curated common-illness and document edge-case examples |
 | Base model | A model that already understands language | `Qwen/Qwen2.5-1.5B-Instruct` |
 | Tokenizer | Breaks text into small pieces the computer can number | Qwen tokenizer |
 | GPU | Special processor that makes training faster | NVIDIA RTX 4050, when available |
@@ -47,7 +47,8 @@ examples:
 2. Hindi instruction -> the Hindi question
 3. Hinglish instruction -> the Romanized Hindi question
 
-Therefore, 83 source pairs become **249 training examples** (83 x 3). A sample
+The current build produces **466 deduplicated training examples** across English,
+Hindi, Hinglish, and safe English document-reading prompts. A sample
 looks like this:
 
 ```text
@@ -92,8 +93,9 @@ receives a request.
 
 The successful bilingual run used:
 
-- **249 examples** in English, Hindi, and Hinglish
-- **3 epochs**: the model saw the complete example collection three times
+- **466 deduplicated examples** including common illnesses, noisy voice phrasing,
+  mixed-language input, and document-reading edge cases
+- **3 epochs** in the current retraining run: the model sees the complete example collection three times
 - **Batch size 1**: one example was placed on the GPU at a time
 - **Gradient accumulation 8**: eight small updates were combined before one
   weight update, acting somewhat like a larger batch

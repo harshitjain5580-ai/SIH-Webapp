@@ -4,6 +4,7 @@
 
 import { ApiService } from './api.js';
 import { VoiceEngine } from './voice.js';
+import { KioskModule } from './kiosk.js?v=20260912';
 import { KioskModule } from './kiosk.js';
 import { ScannerModule } from './scanner.js';
 import { TriageModule } from './triage.js';
@@ -65,6 +66,7 @@ export const App = {
       voiceToggleBtn.addEventListener('click', () => {
         VoiceEngine.ttsEnabled = !VoiceEngine.ttsEnabled;
         voiceToggleBtn.classList.toggle('active', VoiceEngine.ttsEnabled);
+        this.showToast(VoiceEngine.ttsEnabled ? 'Charaka voice enabled' : 'Charaka voice muted', 'info');
         this.showToast(VoiceEngine.ttsEnabled ? 'Voice Assistant Enabled' : 'Voice Assistant Muted', 'info');
       });
     }
@@ -78,6 +80,10 @@ export const App = {
     if (dot && label) {
       if (isLive) {
         dot.className = 'status-dot';
+        label.textContent = 'Connected';
+      } else {
+        dot.className = 'status-dot offline';
+        label.textContent = 'Offline mode';
         label.textContent = 'Backend: Connected (FastAPI)';
       } else {
         dot.className = 'status-dot offline';
@@ -134,6 +140,11 @@ export const App = {
     toast.className = `toast toast-${type}`;
 
     const icon = type === 'success' ? '✓' : (type === 'danger' ? '⚠️' : 'ℹ️');
+    const iconSpan = document.createElement('span');
+    iconSpan.textContent = icon;
+    const messageSpan = document.createElement('span');
+    messageSpan.textContent = message;
+    toast.append(iconSpan, document.createTextNode(' '), messageSpan);
     toast.innerHTML = `<span>${icon}</span> <span>${message}</span>`;
 
     container.appendChild(toast);
