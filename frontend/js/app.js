@@ -8,6 +8,7 @@ import { KioskModule } from './kiosk.js';
 import { ScannerModule } from './scanner.js';
 import { TriageModule } from './triage.js';
 import { DoctorModule } from './doctor.js';
+import { AuthModule } from './auth.js';
 
 export const App = {
   currentView: 'kiosk',
@@ -25,6 +26,10 @@ export const App = {
 
     // Expose to window for inline onclick handlers and cross-module calls
     window.App = this;
+
+    // Login gate: decides which role's views become reachable and starts
+    // the patient interview or opens the doctor's queue accordingly.
+    AuthModule.init();
   },
 
   bindGlobalNavigation() {

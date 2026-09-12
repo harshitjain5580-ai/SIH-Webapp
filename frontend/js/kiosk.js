@@ -68,31 +68,12 @@ export const KioskModule = {
     this.bindEvents();
     this.applyLayout();
     this.applyLanguage();
-    this.resetSession();
+    // The interview itself doesn't start until AuthModule resolves a patient
+    // identity at login and calls setPatientIdentity(), which starts a fresh
+    // session for them.
   },
 
   bindEvents() {
-    // ABHA Verification
-    const abhaBtn = document.getElementById('btn-verify-abha');
-    const abhaInput = document.getElementById('kiosk-abha-input');
-    if (abhaBtn && abhaInput) {
-      abhaBtn.addEventListener('click', () => this.handleAbhaVerification());
-      abhaInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') this.handleAbhaVerification();
-      });
-    }
-
-    // Quick Sample ABHA Buttons
-    document.querySelectorAll('.sample-abha-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const id = e.target.dataset.abha;
-        if (id && abhaInput) {
-          abhaInput.value = id;
-          this.handleAbhaVerification();
-        }
-      });
-    });
-
     // Layout Switch
     const layoutToggle = document.getElementById('kiosk-layout-toggle');
     if (layoutToggle) {
@@ -266,36 +247,39 @@ export const KioskModule = {
   },
 
   /**
-   * ABHA Verification
+   * Apply the patient identity resolved at login (ABHA-verified or walk-in)
+   * to the kiosk header, and start a fresh interview for them.
    */
-  async handleAbhaVerification() {
-    const input = document.getElementById('kiosk-abha-input');
-    const id = input ? input.value.trim() : '';
-    if (!id) return;
+  setPatientIdentity(identity = {}) {
+    this.currentPatient = {
+      abha_id: identity.abha_id || '',
+      name: identity.name || 'Walk-in Patient',
+      verified: !!identity.verified,
+      dob: identity.dob || '',
+      gender: identity.gender || ''
+    };
 
-    const result = await ApiService.verifyAbha(id);
-    if (result && result.verified) {
-      this.currentPatient = {
-        abha_id: result.abha_id,
-        name: result.patient_name || 'Verified Patient',
-        verified: true,
-        dob: result.date_of_birth,
-        gender: result.gender
-      };
+    const nameDisplay = document.getElementById('kiosk-patient-name');
+    const abhaDisplay = document.getElementById('kiosk-patient-abha');
+    const statusBadge = document.getElementById('kiosk-patient-status');
 
-      const nameDisplay = document.getElementById('kiosk-patient-name');
-      const abhaDisplay = document.getElementById('kiosk-patient-abha');
-      const statusBadge = document.getElementById('kiosk-patient-status');
-
-      if (nameDisplay) nameDisplay.textContent = this.currentPatient.name;
-      if (abhaDisplay) abhaDisplay.textContent = `ABHA: ${this.currentPatient.abha_id}`;
-      if (statusBadge) {
+    if (nameDisplay) nameDisplay.textContent = this.currentPatient.name;
+    if (abhaDisplay) {
+      abhaDisplay.textContent = this.currentPatient.verified
+        ? `ABHA: ${this.currentPatient.abha_id}`
+        : 'ABHA ID: Not Verified';
+    }
+    if (statusBadge) {
+      if (this.currentPatient.verified) {
         statusBadge.className = 'badge badge-success';
         statusBadge.textContent = 'ABHA Verified';
+      } else {
+        statusBadge.className = 'badge badge-warning';
+        statusBadge.textContent = 'Self Intake Mode';
       }
-
-      window.App.showToast(`ABHA verified for ${this.currentPatient.name}`, 'success');
     }
+
+    this.resetSession();
   },
 
   /**

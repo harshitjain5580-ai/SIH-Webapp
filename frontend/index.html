@@ -16,8 +16,124 @@
 </head>
 <body>
 
-  <div class="app-container">
-    
+  <!-- ================================================================
+       Login Gate: role selection (patient / doctor). See auth.js for
+       the important caveat that this is a navigation split, not real
+       backend authentication.
+       ================================================================ -->
+  <div class="login-screen" id="login-screen">
+    <div class="login-topbar">
+      <div class="login-brand">
+        <div class="brand-icon">✚</div>
+        <div class="brand-text">
+          <h1>MediKiosk</h1>
+          <span>Clinical AI Intake</span>
+        </div>
+      </div>
+      <button type="button" class="kiosk-help-btn"><span>🙋</span><span>Need help</span></button>
+    </div>
+
+    <div class="login-body">
+      <div class="login-card">
+        <div id="login-patient-heading">
+          <h2 class="login-title">Welcome. Let us start your visit.</h2>
+          <p class="login-subtitle">Sign in with your ABHA ID, or continue as a walk-in without any ID.</p>
+        </div>
+        <div id="login-doctor-heading" hidden>
+          <h2 class="login-title">Physician sign in</h2>
+          <p class="login-subtitle">Access patient intake summaries, triage alerts and the case repository.</p>
+        </div>
+
+        <div class="segmented-toggle login-role-toggle" id="login-role-toggle">
+          <button type="button" class="segmented-toggle-btn" data-login-role="patient">👤 Patient</button>
+          <button type="button" class="segmented-toggle-btn" data-login-role="doctor">🩺 Doctor</button>
+        </div>
+
+        <!-- Patient sign-in -->
+        <div id="login-patient-panel">
+          <div class="form-group">
+            <label class="form-label" for="login-abha-input">ABHA ID or ABHA Number</label>
+            <input type="text" class="form-control" id="login-abha-input" placeholder="91-9876543210@abdm">
+            <p class="login-hint">Printed on your Ayushman Bharat health card. 14 digits or name@abdm.</p>
+          </div>
+          <button type="button" class="btn btn-primary login-submit" id="btn-login-send-otp">Send OTP to my phone →</button>
+
+          <div class="login-divider"><span>OR</span></div>
+
+          <button type="button" class="login-option-row" id="btn-login-mobile">
+            <span class="login-option-icon">🔢</span>
+            <span class="login-option-text">
+              <strong>Use mobile number instead</strong>
+              <span class="login-option-subtitle">We will send a 6-digit code</span>
+            </span>
+          </button>
+          <button type="button" class="login-option-row" id="btn-login-walkin">
+            <span class="login-option-icon">🚶</span>
+            <span class="login-option-text">
+              <strong>I do not have an ABHA ID</strong>
+              <span class="login-option-subtitle">Continue as a walk-in patient</span>
+            </span>
+          </button>
+
+          <div class="login-notice">
+            <span>🔒</span>
+            <span>Your answers are shared only with the doctor who sees you today. Nothing is stored on this kiosk after your visit ends.</span>
+          </div>
+
+          <div class="login-sample-row">
+            <span>Quick sample patients:</span>
+            <button type="button" class="sample-chip login-sample-btn" data-abha="priya.patel@abdm">Priya (F/34)</button>
+            <button type="button" class="sample-chip login-sample-btn" data-abha="vikram.singh@abdm">Vikram (M/52)</button>
+            <button type="button" class="sample-chip login-sample-btn" data-abha="ananya.das@abdm">Ananya (F/28)</button>
+          </div>
+        </div>
+
+        <!-- Doctor sign-in -->
+        <div id="login-doctor-panel" hidden>
+          <div class="form-group">
+            <label class="form-label" for="login-doctor-email">Hospital email or Medical Council registration number</label>
+            <input type="text" class="form-control" id="login-doctor-email" placeholder="r.mehta@cityhospital.in">
+          </div>
+          <div class="form-group">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <label class="form-label" for="login-doctor-password" style="margin-bottom: 0;">Password</label>
+              <a href="#" class="login-forgot" onclick="return false;">Forgot password?</a>
+            </div>
+            <input type="password" class="form-control" id="login-doctor-password" placeholder="••••••••••••">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Department for this session</label>
+            <div class="login-dept-row" id="login-dept-row">
+              <button type="button" class="dept-chip active" data-dept="General Medicine">General Medicine</button>
+              <button type="button" class="dept-chip" data-dept="Cardiology">Cardiology</button>
+              <button type="button" class="dept-chip" data-dept="AYUSH">AYUSH</button>
+              <button type="button" class="dept-chip" data-dept="Emergency">Emergency</button>
+            </div>
+          </div>
+          <button type="button" class="btn btn-primary login-submit" id="btn-login-doctor">Sign in to review queue →</button>
+
+          <div class="login-divider"><span>OR</span></div>
+
+          <button type="button" class="login-option-row login-option-row-center" id="btn-login-sso">
+            <span class="login-option-icon">🏥</span>
+            <span class="login-option-text"><strong>Continue with hospital SSO</strong></span>
+          </button>
+
+          <div class="login-notice login-notice-warning">
+            <span>⚠️</span>
+            <span>Clinical access is logged. Every summary you open, amend or push to the HIS is recorded against your registration number.</span>
+          </div>
+        </div>
+
+        <p class="login-demo-disclaimer">
+          Prototype note: this screen routes you to the right interface. It does not check real passwords, send real OTPs, or connect to a hospital SSO provider.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-container" id="app-container" hidden>
+
     <!-- Sidebar Navigation -->
     <aside class="app-sidebar" id="app-sidebar">
       <div class="sidebar-brand">
@@ -29,32 +145,32 @@
       </div>
 
       <nav class="sidebar-nav">
-        <div class="nav-section-title">Patient Intake</div>
-        
-        <button class="nav-item active" data-view="kiosk" id="nav-kiosk">
+        <div class="nav-section-title" data-role="patient">Patient Intake</div>
+
+        <button class="nav-item active" data-view="kiosk" data-role="patient" id="nav-kiosk">
           <span class="nav-icon">🎙️</span>
           <span>Intake Kiosk</span>
         </button>
 
-        <button class="nav-item" data-view="scanner" id="nav-scanner">
+        <button class="nav-item" data-view="scanner" data-role="patient" id="nav-scanner">
           <span class="nav-icon">📄</span>
           <span>Document OCR</span>
         </button>
 
-        <div class="nav-section-title">Clinical Operations</div>
+        <div class="nav-section-title" data-role="doctor">Clinical Operations</div>
 
-        <button class="nav-item" data-view="triage" id="nav-triage">
+        <button class="nav-item" data-view="triage" data-role="doctor" id="nav-triage">
           <span class="nav-icon">🚨</span>
           <span>Triage & Waiting Room</span>
           <span class="badge badge-primary" id="sidebar-triage-badge">Live</span>
         </button>
 
-        <button class="nav-item" data-view="doctor-review" id="nav-doctor-review">
+        <button class="nav-item" data-view="doctor-review" data-role="doctor" id="nav-doctor-review">
           <span class="nav-icon">🩺</span>
           <span>Physician Review</span>
         </button>
 
-        <button class="nav-item" data-view="training-cases" id="nav-training-cases">
+        <button class="nav-item" data-view="training-cases" data-role="doctor" id="nav-training-cases">
           <span class="nav-icon">📚</span>
           <span>Case Repository</span>
         </button>
@@ -74,6 +190,9 @@
         <div style="font-size: 0.72rem; color: var(--utd-color-textmuted); line-height: 1.3;">
           ABDM Sandbox & FHIR Mock Ready
         </div>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-logout" style="width: 100%;">
+          🚪 Switch user / Log out
+        </button>
       </div>
     </aside>
 
@@ -140,30 +259,6 @@
                 <button class="btn btn-secondary btn-sm" id="btn-reset-kiosk" style="color: #FFFFFF; background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.3);">
                   🔄 New Session
                 </button>
-              </div>
-            </div>
-
-            <!-- ABHA ID Quick Verification Toolbar -->
-            <div class="card" style="padding: 16px 20px;">
-              <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
-                <div style="flex-grow: 1; min-width: 260px;">
-                  <label class="form-label" style="margin-bottom: 4px; font-size: 0.82rem;">
-                    Ayushman Bharat Health Account (ABHA ID / Number)
-                  </label>
-                  <div style="display: flex; gap: 10px;">
-                    <input type="text" class="form-control" id="kiosk-abha-input" placeholder="e.g. 91-9876543210@abdm or priya.patel@abdm">
-                    <button class="btn btn-primary" id="btn-verify-abha">Verify ABHA</button>
-                  </div>
-                </div>
-
-                <div>
-                  <span style="font-size: 0.78rem; color: var(--utd-color-textmuted); display: block; margin-bottom: 4px;">Quick Sample Patients:</span>
-                  <div style="display: flex; gap: 6px;">
-                    <button class="sample-chip sample-abha-btn" data-abha="priya.patel@abdm">Priya (F/34)</button>
-                    <button class="sample-chip sample-abha-btn" data-abha="vikram.singh@abdm">Vikram (M/52)</button>
-                    <button class="sample-chip sample-abha-btn" data-abha="ananya.das@abdm">Ananya (F/28)</button>
-                  </div>
-                </div>
               </div>
             </div>
 

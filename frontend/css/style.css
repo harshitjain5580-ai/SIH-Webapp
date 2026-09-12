@@ -1016,6 +1016,239 @@ textarea.form-control {
 }
 
 /* --------------------------------------------------------------------------
+   Module 0: Login Gate (role selection: patient / doctor)
+   -------------------------------------------------------------------------- */
+.login-screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--utd-color-background);
+}
+
+.login-topbar {
+  height: 76px;
+  flex-shrink: 0;
+  padding: 0 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--utd-color-secondary);
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.login-brand .brand-text h1 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #FFFFFF;
+  line-height: 1.2;
+}
+
+.login-brand .brand-text span {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #8FC3A5;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.login-body {
+  flex-grow: 1;
+  display: flex;
+  justify-content: center;
+  padding: 48px 20px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 620px;
+}
+
+.login-title {
+  font-size: 1.9rem;
+  font-weight: 800;
+  color: var(--utd-color-textprimary);
+  margin-bottom: 8px;
+}
+
+.login-subtitle {
+  font-size: 1rem;
+  color: var(--utd-color-link);
+  margin-bottom: 24px;
+}
+
+.login-role-toggle {
+  width: 100%;
+  margin-bottom: 24px;
+}
+
+.login-role-toggle .segmented-toggle-btn {
+  flex: 1;
+  padding: 14px;
+  font-size: 1rem;
+}
+
+.login-hint {
+  font-size: 0.82rem;
+  color: var(--utd-color-textmuted);
+  margin-top: 6px;
+}
+
+.login-submit {
+  width: 100%;
+  padding: 16px;
+  font-size: 1.05rem;
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 22px 0;
+  color: var(--utd-color-textmuted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.login-divider::before, .login-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--utd-color-border);
+}
+
+.login-option-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  text-align: left;
+  padding: 16px 18px;
+  margin-bottom: 12px;
+  border-radius: var(--utd-border-radius);
+  border: 1px solid var(--utd-color-border);
+  background: var(--utd-color-surface-hover);
+  cursor: pointer;
+  font-family: var(--utd-font-family);
+  transition: all var(--transition-fast);
+}
+
+.login-option-row:hover {
+  border-color: var(--utd-color-primary);
+  background: var(--utd-color-primary-light);
+}
+
+.login-option-row-center {
+  justify-content: center;
+}
+
+.login-option-icon {
+  font-size: 1.3rem;
+}
+
+.login-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.login-option-text strong {
+  font-size: 1rem;
+  color: var(--utd-color-textprimary);
+}
+
+.login-option-subtitle {
+  font-size: 0.85rem;
+  color: var(--utd-color-textmuted);
+}
+
+.login-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: var(--utd-border-radius);
+  background: var(--utd-color-surface-hover);
+  border: 1px solid var(--utd-color-border);
+  font-size: 0.85rem;
+  color: var(--utd-color-textsecondary);
+  line-height: 1.4;
+}
+
+.login-notice-warning {
+  background: var(--utd-color-warning-bg);
+  border-color: var(--utd-color-warning-border);
+  color: var(--utd-color-warning-text);
+}
+
+.login-sample-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+  font-size: 0.8rem;
+  color: var(--utd-color-textmuted);
+}
+
+.login-forgot {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--utd-color-link);
+  text-decoration: none;
+}
+
+.login-dept-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dept-chip {
+  padding: 10px 16px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border-radius: var(--utd-border-radius);
+  border: 1px solid var(--utd-color-border);
+  background: var(--utd-color-surface);
+  color: var(--utd-color-textsecondary);
+  cursor: pointer;
+  font-family: var(--utd-font-family);
+  transition: all var(--transition-fast);
+}
+
+.dept-chip.active {
+  background: var(--utd-color-primary);
+  border-color: var(--utd-color-primary);
+  color: #FFFFFF;
+}
+
+.login-demo-disclaimer {
+  margin-top: 28px;
+  font-size: 0.78rem;
+  color: var(--utd-color-textmuted);
+  text-align: center;
+  line-height: 1.4;
+}
+
+@media (max-width: 640px) {
+  .login-topbar {
+    padding: 0 16px;
+  }
+  .login-body {
+    padding: 28px 16px;
+  }
+  .login-title {
+    font-size: 1.5rem;
+  }
+}
+
+/* --------------------------------------------------------------------------
    Module 1b: Patient Kiosk Redesign (two selectable directions)
    Patient-facing question screen only — no SOCRATES/AYUSH clinician panels
    here; those stay on the triage/physician views.
