@@ -1,4 +1,4 @@
-"""Fine-tune Qwen2.5-1.5B-Instruct with 4-bit QLoRA on prescription transcriptions."""
+"""Train a Qwen intake model with consistent ChatML formatting for English/Hindi/Hinglish follow-up questions."""
 from __future__ import annotations
 
 import argparse
@@ -34,12 +34,127 @@ def romanize_hindi(text: str) -> str:
     return "".join(result).replace("aa p", "aap").replace(" hai", " hai")
 
 
+def _build_chatml_examples(frame: pd.DataFrame) -> list[dict]:
+    """Create consistent ChatML examples with transcript + question pairs instead of category-only prompts."""
+    records = []
+    for _, row in frame.iterrows():
+        category = str(row.get("category") or "").strip()
+        transcript = str(row.get("transcript") or row.get("patient transcript") or row.get("input") or "").strip()
+        if not transcript:
+            transcript = f"Patient reported a symptom in the {category} category." if category else "Patient reported a symptom."
+        english_question = str(row.get("English question") or row.get("question_en") or "").strip()
+        hindi_question = str(row.get("Hindi question (Devanagari)") or row.get("question_hi") or "").strip()
+        hinglish_question = str(row.get("Hinglish question (Roman)") or row.get("question_hinglish") or "").strip()
+        if not english_question and not hindi_question and not hinglish_question:
+            continue
+        if not hindi_question and english_question:
+            hindi_question = romanize_hindi(english_question)
+        if not hinglish_question and english_question:
+            hinglish_question = english_question
+
+        variants = []
+        if english_question:
+            variants.append(("English", english_question))
+        if hindi_question:
+            variants.append(("Hindi", hindi_question))
+        if hinglish_question:
+            variants.append(("Hinglish", hinglish_question))
+        for language, question in variants:
+            records.append({
+                "messages": [
+                    {"role": "system", "content": "You are a safe clinical intake interviewer. Ask exactly one short follow-up question. Never diagnose or prescribe medicine."},
+                    {"role": "user", "content": f"Patient transcript: {transcript}. Continue the interview in {language}."},
+                    {"role": "assistant", "content": question},
+                ],
+                "language": language,
+            })
+    return records
+
+
+def _load_curated_examples(path: Path) -> list[dict]:
+    """Load illness-specific transcript/question pairs kept outside the workbook."""
+    if not path.exists():
+        return []
+    records = []
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Invalid JSON in {path} at line {line_number}") from exc
+        transcript = str(item.get("transcript", "")).strip()
+        if not transcript:
+            continue
+        for language, key in (("English", "question_en"), ("Hindi", "question_hi"), ("Hinglish", "question_hinglish")):
+            question = str(item.get(key, "")).strip()
+            if question:
+                records.append({
+                    "messages": [
+                        {"role": "system", "content": "You are a safe clinical intake interviewer. Ask exactly one short, illness-relevant follow-up question. Never diagnose or prescribe medicine."},
+                        {"role": "user", "content": f"Patient transcript: {transcript}. Continue the interview in {language}."},
+                        {"role": "assistant", "content": question},
+                    ],
+                    "language": language,
+                    "illness": item.get("illness", "common"),
+                })
+    return records
+
+
+def _load_edge_case_examples(path: Path) -> list[dict]:
+    """Convert safe OCR/voice edge-case records into explicit non-diagnostic prompts."""
+    if not path.exists():
+        return []
+    records = []
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Invalid JSON in {path} at line {line_number}") from exc
+        document_type = str(item.get("document_type", "medical document")).strip()
+        quality = str(item.get("input_quality", "unclear image")).replace("_", " ")
+        expected = json.dumps(item.get("expected", {}), ensure_ascii=False, sort_keys=True)
+        instruction = (
+            f"Document type: {document_type}. Image condition: {quality}. "
+            "Extract only high-confidence clinical fields and never guess missing text."
+        )
+        records.append({
+            "messages": [
+                {"role": "system", "content": "You are a safe clinical document-reading assistant. Return only high-confidence structured findings and explicitly leave unclear fields empty."},
+                {"role": "user", "content": instruction},
+                {"role": "assistant", "content": expected},
+            ],
+            "language": "English",
+            "illness": "document-reading",
+        })
+    return records
+
+
+def _deduplicate_examples(examples: list[dict]) -> list[dict]:
+    """Remove repeated prompt/answer pairs before training so added density is useful."""
+    unique = []
+    seen = set()
+    for example in examples:
+        messages = example["messages"]
+        key = (messages[1]["content"].strip().lower(), messages[2]["content"].strip().lower())
+        if key not in seen:
+            seen.add(key)
+            unique.append(example)
+    return unique
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", default="bilingual_clinical_conversation_questions.xlsx")
     parser.add_argument("--output", default="training/outputs/qwen2.5-1.5b-bilingual-lora")
     parser.add_argument("--model", default="Qwen/Qwen2.5-1.5B-Instruct")
     parser.add_argument("--device", choices=["auto", "cuda", "cpu"], default="auto")
+    parser.add_argument("--epochs", type=float, default=3.0, help="Training epochs; use 3-4 for the curated dataset.")
+    parser.add_argument("--learning-rate", type=float, default=5e-5)
+    parser.add_argument("--max-samples", type=int, default=None, help="Optional cap for a quick dry-run or smoke training loop.")
+    parser.add_argument("--dry-run", action="store_true", help="Validate the dataset and print a sample without running full training.")
     args = parser.parse_args()
     if args.device == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("CUDA was requested but is not available.")
@@ -47,31 +162,42 @@ def main() -> None:
     if device == "auto":
         device = "cpu"
 
-    frame = pd.read_excel(args.dataset, sheet_name="Training_Data").dropna(
-        subset=["English question", "Hindi question (Devanagari)"]
-    )
-    has_hinglish_column = "Hinglish question (Roman)" in frame.columns
-    records = frame.to_dict("records")
-    examples = []
-    for record in records:
-        safety = str(record.get("safety note", ""))
-        hinglish_question = str(record.get("Hinglish question (Roman)", "")).strip()
-        if not hinglish_question or hinglish_question.lower() == "nan":
-            hinglish_question = romanize_hindi(record["Hindi question (Devanagari)"])
-        examples.extend([
-            f"System: You are a safe clinical intake interviewer. Ask one question only. Never diagnose or prescribe medicine.\n"
-            f"User: Continue the interview in English. Category: {record['category']}. Ask the next question.\n"
-            f"Assistant: {record['English question']}\nSafety: {safety}",
-            f"System: आप सुरक्षित स्वास्थ्य-साक्षात्कार सहायक हैं। एक बार में केवल एक प्रश्न पूछें। निदान या दवा न लिखें।\n"
-            f"User: हिंदी में बातचीत जारी रखें। श्रेणी: {record['category']}. अगला प्रश्न पूछें।\n"
-            f"Assistant: {record['Hindi question (Devanagari)']}\nSafety: {safety}",
-            f"System: You are a safe clinical intake interviewer. Ask one question only. Never diagnose or prescribe medicine.\n"
-            f"User: Continue the interview in Hinglish (Roman Hindi). Category: {record['category']}. Ask the next question.\n"
-            f"Assistant: {hinglish_question}\nSafety: {safety}",
-        ])
-    dataset = Dataset.from_dict({"text": examples})
+    frame_path = Path(args.dataset)
+    if not frame_path.exists():
+        raise FileNotFoundError(f"Training dataset not found: {frame_path}")
+
+    with pd.ExcelFile(frame_path) as workbook:
+        sheet_names = workbook.sheet_names
+        sheet_name = "Training_Data" if "Training_Data" in sheet_names else sheet_names[0]
+        frame = pd.read_excel(frame_path, sheet_name=sheet_name)
+    required_columns = ["English question", "Hindi question (Devanagari)"]
+    missing = [column for column in required_columns if column not in frame.columns]
+    if missing:
+        raise ValueError(f"Missing required columns in dataset: {missing}")
+    frame = frame.dropna(subset=["English question", "Hindi question (Devanagari)"])
+    examples = _build_chatml_examples(frame)
+    examples.extend(_load_curated_examples(Path(__file__).with_name("common_illness_examples.jsonl")))
+    examples.extend(_load_edge_case_examples(Path(__file__).with_name("document_edge_cases.jsonl")))
+    examples = _deduplicate_examples(examples)
+    if args.max_samples is not None:
+        examples = examples[: args.max_samples]
+    if not examples:
+        raise ValueError("No usable training examples were generated from the dataset.")
+
+    if args.dry_run:
+        print(json.dumps({
+            "sample_count": len(examples),
+            "first_example": examples[0],
+            "device": device,
+        }, ensure_ascii=False, indent=2))
+        return
+
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     tokenizer.pad_token = tokenizer.eos_token
+    dataset = Dataset.from_list([
+        {"text": tokenizer.apply_chat_template(example["messages"], tokenize=False, add_generation_prompt=True)}
+        for example in examples
+    ])
     dataset = dataset.map(
         lambda batch: tokenizer(batch["text"], truncation=True, max_length=512),
         batched=True,
@@ -83,21 +209,24 @@ def main() -> None:
         dtype=torch.bfloat16 if device == "cuda" else torch.float32,
     )
     model.gradient_checkpointing_enable()
-    model.add_adapter(
-        LoraConfig(
-            r=8, lora_alpha=16, lora_dropout=0.05, bias="none",
-            task_type="CAUSAL_LM", target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
-        )
+    lora_cfg = LoraConfig(
+        r=8,
+        lora_alpha=16,
+        lora_dropout=0.05,
+        bias="none",
+        task_type="CAUSAL_LM",
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
     )
+    model.add_adapter(lora_cfg)
     output = Path(args.output)
     trainer = Trainer(
         model=model,
         args=TrainingArguments(
             output_dir=str(output / "checkpoints"),
-            num_train_epochs=3,
+            num_train_epochs=args.epochs,
             per_device_train_batch_size=1,
             gradient_accumulation_steps=8,
-            learning_rate=5e-5,
+            learning_rate=args.learning_rate,
             use_cpu=device == "cpu",
             bf16=device == "cuda",
             fp16=False,
@@ -116,12 +245,15 @@ def main() -> None:
     tokenizer.save_pretrained(str(output))
     (output / "training_summary.json").write_text(
         json.dumps({
-            "base_model": args.model, "method": "LoRA",
-            "quantization": "none (bitsandbytes 4-bit loader crashes on this Windows runtime)",
-            "examples": len(examples), "source_question_pairs": len(records), "languages": ["English", "Hindi", "Hinglish"],
-            "used_source_hinglish_column": has_hinglish_column,
-            "epochs": 3, "batch_size": 1,
-            "gradient_accumulation_steps": 8, "learning_rate": 5e-5,
+            "base_model": args.model,
+            "method": "LoRA",
+            "format": "ChatML",
+            "examples": len(examples),
+            "languages": ["English", "Hindi", "Hinglish"],
+            "epochs": args.epochs,
+            "batch_size": 1,
+            "gradient_accumulation_steps": 8,
+            "learning_rate": args.learning_rate,
             "device": device,
             "gpu": torch.cuda.get_device_name(0) if device == "cuda" else None,
             "vram_gib": torch.cuda.get_device_properties(0).total_memory / 1024**3 if device == "cuda" else None,

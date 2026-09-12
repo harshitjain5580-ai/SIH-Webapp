@@ -3,6 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MediKiosk - Charaka AI Clinical History Assistant</title>
+  <meta name="description" content="Charaka AI-assisted clinical history intake kiosk, prescription document OCR, SOCRATES pain framework, AYUSH Dashavidha Pariksha, and triage management.">
   <title>MediKiosk - AI Clinical History Intake & Triage Platform</title>
   <meta name="description" content="AI-assisted clinical history intake kiosk, prescription document OCR, SOCRATES pain framework, AYUSH Dashavidha Pariksha, and triage management.">
   
@@ -12,6 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400;1,9..40,600&display=swap" rel="stylesheet">
   
   <!-- Design System Stylesheet strictly adhering to DESIGN.md -->
+  <link rel="stylesheet" href="css/style.css?v=20260912">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -24,6 +27,7 @@
         <div class="brand-icon">✚</div>
         <div class="brand-text">
           <h1>MediKiosk</h1>
+          <span>Charaka AI Assistant</span>
           <span>Clinical AI Intake</span>
         </div>
       </div>
@@ -69,6 +73,10 @@
       <div class="sidebar-footer">
         <div class="status-indicator">
           <div class="status-dot" id="backend-status-dot"></div>
+          <span id="backend-status-label">Checking connection...</span>
+        </div>
+        <div style="font-size: 0.72rem; color: var(--utd-color-textmuted); line-height: 1.3;">
+          Health records ready
           <span id="backend-status-label">Checking Backend...</span>
         </div>
         <div style="font-size: 0.72rem; color: var(--utd-color-textmuted); line-height: 1.3;">
@@ -93,6 +101,7 @@
         </div>
 
         <div class="header-actions">
+          <button class="voice-master-toggle active" id="btn-toggle-voice-assistant" title="Toggle Charaka voice read-aloud assistant">
           <button class="voice-master-toggle active" id="btn-toggle-voice-assistant" title="Toggle voice read-aloud assistant">
             <span>🔊</span>
             <span>Voice Readout</span>
@@ -174,6 +183,17 @@
               <div style="display: flex; flex-direction: column; gap: 16px;">
                 
                 <!-- Chat Transcript Box -->
+                <div class="gender-selection-card" id="kiosk-gender-selection">
+                  <div>
+                    <h3>Before we begin</h3>
+                    <p>Please select the gender you identify with. This helps Charaka ask relevant health questions.</p>
+                  </div>
+                  <div class="gender-options" role="group" aria-label="Gender selection">
+                    <button type="button" class="gender-option-btn" data-gender="Male">Male</button>
+                    <button type="button" class="gender-option-btn" data-gender="Female">Female</button>
+                    <button type="button" class="gender-option-btn" data-gender="Other or prefer not to say">Other / Prefer not to say</button>
+                  </div>
+                </div>
                 <div class="kiosk-chat-box" id="kiosk-chat-stream">
                   <!-- Dynamic Turns Populated by JS -->
                 </div>
@@ -193,6 +213,7 @@
                   <div class="kiosk-input-controls">
                     
                     <!-- Voice Microphone Button -->
+                    <button class="mic-action-btn" id="kiosk-mic-btn" title="Speak to Charaka (Click to record voice in Hindi/English/Hinglish)">
                     <button class="mic-action-btn" id="kiosk-mic-btn" title="Speak to MediKiosk (Click to record voice in Hindi/English/Hinglish)">
                       🎤
                     </button>
@@ -616,6 +637,7 @@
                 Doctor-Reviewed Case Repository & Fine-Tuning Sandbox
               </h3>
               <p style="font-size: 0.88rem; color: var(--utd-color-textmuted); margin-top: 4px;">
+                Curated clinical cases approved by physicians to improve safe bilingual history questions.
                 Curated clinical cases approved by physicians to refine Qwen-2.5 local bilingual clinical history intake models.
               </p>
             </div>
@@ -639,6 +661,7 @@
                       Patient presented with retrosternal pressure radiating to jaw. Model successfully extracted all 8 SOCRATES parameters and flagged emergency red flag within 2 dialogue turns.
                     </p>
                     <div style="margin-top: 8px; display: flex; gap: 6px;">
+                      <span class="badge badge-primary">Charaka AI Assistant</span>
                       <span class="badge badge-primary">Qwen-2.5-1.5B</span>
                       <span class="badge badge-warning">Bilingual (Hindi/English)</span>
                     </div>
@@ -693,6 +716,7 @@
   <div class="toast-container" id="toast-container"></div>
 
   <!-- Main JavaScript Bundle (ES Modules) -->
+  <script type="module" src="js/app.js?v=20260912"></script>
   <script type="module" src="js/app.js"></script>
 </body>
 </html>
