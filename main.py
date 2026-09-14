@@ -1722,6 +1722,12 @@ async def upload_document(file: UploadFile = File(...)) -> DocumentUploadResult:
     if not contents:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
+    storage_ready = True
+    try:
+        _require_supabase_configuration()
+    except HTTPException:
+        storage_ready = False
+
     filename = file.filename or "document.jpg"
     extension = os.path.splitext(filename)[1] or ".jpg"
     storage_path = f"uploads/{uuid.uuid4()}{extension}"
@@ -1736,6 +1742,12 @@ async def upload_document(file: UploadFile = File(...)) -> DocumentUploadResult:
             )
             public_url = supabase.storage.from_(MEDICAL_DOCUMENTS_BUCKET).get_public_url(storage_path)
         except Exception as exc:
+            logger.warning("Supabase Storage upload failed; using offline document fallback: %s", exc)
+            storage_ready = False
+
+    if not storage_ready:
+        fallback = _safe_document_fallback(file.filename or storage_path, contents)
+        return DocumentUploadResult(storage_path=storage_path, extracted_document=fallback)
             logger.warning("Supabase Storage upload failed: %s", exc)
 
     if not public_url:
