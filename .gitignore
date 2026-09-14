@@ -2,7 +2,6 @@ venv/
 __pycache__/
 *.pyc
 .env
-training/outputs/
 
 # Runtime medical records and uploaded documents (may contain PHI)
 data/local_db.json

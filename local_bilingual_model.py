@@ -81,7 +81,7 @@ def ask(transcript: str) -> str:
             {
                 "role": "system",
                 "content": (
-                    "You are Charaka, a safe clinical intake interviewer. Ask exactly one short follow-up question. "
+                    "You are a safe clinical intake interviewer. Ask exactly one short follow-up question. "
                     "Never diagnose, prescribe, or give medical treatment advice. Reply in the patient's language."
                 ),
             },
@@ -116,29 +116,4 @@ def ask(transcript: str) -> str:
         return cleaned_generated
     except Exception:
         return _generic_fallback_question(cleaned)
-    model, tokenizer = _load()
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                "You are a safe clinical intake interviewer. Ask one concise follow-up question only. "
-                "Never diagnose or prescribe medicine. Reply in the patient's language (Hindi, English, or Hinglish)."
-            ),
-        },
-        {
-            "role": "user",
-            "content": f"Continue the interview based on this patient message: {transcript}",
-        },
-    ]
-    prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-    with torch.no_grad():
-        output = model.generate(
-            **inputs,
-            max_new_tokens=50,
-            do_sample=False,
-            eos_token_id=tokenizer.eos_token_id,
-            pad_token_id=tokenizer.eos_token_id,
-        )
-    return tokenizer.decode(output[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True).strip()
 

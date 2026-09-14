@@ -38,8 +38,6 @@ from urllib.parse import urlparse
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -391,11 +389,18 @@ class PatientLoginResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 app = FastAPI(title="MediKiosk API", version="0.1.0")
+
+# The frontend is normally served same-origin via the /app mount below, so CORS
+# only matters for a frontend served separately during development (e.g. a
+# live-server dev tool on another port). CORS_ALLOW_ORIGINS lets that be
+# configured without a code change; the defaults cover the frontend's own
+# origin plus common local dev-server ports.
 allowed_origins = [
     origin.strip()
     for origin in os.environ.get(
         "CORS_ALLOW_ORIGINS",
-        "http://127.0.0.1:5500,http://localhost:5500,http://127.0.0.1:8080,http://localhost:8080",
+        "http://127.0.0.1:8000,http://localhost:8000,http://127.0.0.1:5500,http://localhost:5500,"
+        "http://127.0.0.1:8080,http://localhost:8080",
     ).split(",")
     if origin.strip()
 ]
@@ -403,15 +408,6 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Enable CORS for web frontend clients
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -689,6 +685,12 @@ def _normalize_voice_text(payload: object) -> str:
     return ""
 
 
+# NOT currently called anywhere, and not recommended: this calls the
+# training/outputs/best_model/model.pkl nearest-neighbor baseline, which
+# earlier testing this session measured at ~80% character error rate (it
+# returns whichever training image is nearest by raw pixel gradients, not a
+# real OCR result). Left in place rather than deleted unilaterally, but
+# wiring it back in isn't advised without retraining a real model first.
 def _local_document_fallback(contents: bytes, filename: str) -> Optional[ExtractedDocument]:
     """Use the trained nearest-neighbor baseline if no external OCR model is configured."""
     model_path = Path(__file__).resolve().parent / "training" / "outputs" / "best_model" / "model.pkl"
@@ -727,6 +729,12 @@ def _local_document_fallback(contents: bytes, filename: str) -> Optional[Extract
         return None
 
 
+# NOT currently called anywhere. An alternative to clinical_engine.py's
+# extract_document_clinically (used by /extract-from-image and /upload-document
+# below): this one derives a generic, honest placeholder from the filename
+# alone ("Prescription document uploaded for manual review"), whereas
+# extract_document_clinically fabricates specific-looking diagnoses/medications/
+# labs. Same demo-polish-vs-honesty tradeoff as _local_clinical_summary above.
 def _safe_document_fallback(filename: str, contents: bytes) -> ExtractedDocument:
     """Offline fallback that preserves the document upload flow even without Supabase or model access."""
     basename = (filename or "document").lower()
@@ -897,7 +905,7 @@ async def _local_voice_assistant(file: UploadFile, language: str) -> Conversatio
     lower = text_for_model.lower()
     hinglish = any(word in lower for word in ("mere", "pet", "dard", "hai", "hue", "kaise"))
     hindi = any("\u0900" <= char <= "\u097f" for char in transcription.text)
-    urgent = any(word in lower for word in ("chest pain", "breathing", "faint", "stroke", "बेहोश", "सीने"))
+    urgent = detect_red_flags(text_for_model)
     return ConversationalQuestionResponse(
         reply=reply,
         language="Hinglish" if hinglish else ("Hindi" if hindi else ("Hindi" if detected_language.startswith("hi") else "English")),
@@ -925,6 +933,13 @@ PATIENT_HISTORIES_TABLE = "patient_histories"
 MEDICAL_DOCUMENTS_BUCKET = "medical_documents"
 
 
+# NOT currently called anywhere. A stricter alternative to _is_supabase_available()
+# (used throughout below): raises a 503 with an actionable message instead of
+# just returning a boolean, and additionally validates the URL actually parses
+# rather than just checking it's non-placeholder. Left in place; adopting it
+# would mean changing call sites from an `if _is_supabase_available():` guard
+# to a try/except around this, which is a real behavior change worth deciding
+# on rather than doing silently.
 def _require_supabase_configuration() -> None:
     """Raise an actionable error before attempting a request to an invalid host."""
     supabase_url = os.environ.get("SUPABASE_URL", "").strip()
@@ -973,6 +988,15 @@ SYSTEM_PROMPT = (
 )
 
 
+# NOT currently called anywhere. This is an alternative to clinical_engine.py's
+# synthesize_clinical_summary (used below): it honestly reports "Not available
+# from local fallback" for every AYUSH/SOCRATES field it can't derive from
+# keyword matching, rather than synthesize_clinical_summary's approach of
+# filling in a specific, detailed, but entirely fabricated clinical narrative
+# once a keyword match is found. The fabricated version demos better (looks
+# like a complete clinical summary); this one is more honest about what the
+# fallback actually knows. Left in place pending a decision on which
+# tradeoff to standardize on, rather than silently picking one.
 def _local_clinical_summary(transcript: Optional[str], documents: Optional[List[DocumentExtractionInput]] = None) -> ClinicalHistorySummary:
     """Generate a deterministic, safe fallback summary when the external AI provider is unavailable."""
     text = (transcript or "").strip()
@@ -1065,6 +1089,15 @@ CONVERSE_SYSTEM_PROMPT = (
 )
 
 
+# Used by /converse below as the local (non-OpenAI) conversational fallback.
+# Richer than clinical_engine.py's generate_local_conversation_step (bilingual
+# English/Hindi/Hinglish, illness-adaptive branching, filters out the
+# synthetic "Patient gender selected: ..." turn from question sequencing) --
+# confirmed as the intended engine by tests/test_backend_smoke.py, which
+# asserts this exact adaptive behavior. Because its question count and
+# identity vary by illness category and language, the frontend's Guided Steps
+# rail (frontend/js/kiosk.js) shows a generic numbered sequence rather than
+# fixed named categories.
 def _fallback_conversation_step(history: List[ConversationTurn]) -> ConversationStep:
     """Keep the kiosk useful when the external structured-output model is unavailable."""
     patient_turns = [
@@ -1266,7 +1299,7 @@ GENERATE_SUMMARY_SYSTEM_PROMPT = (
     "or neurological deficits. Otherwise set it to false."
 )
 CONVERSATION_SYSTEM_PROMPT = (
-    "You are Charaka, MediKiosk's clinical intake interviewer. Your only job is to ask the patient "
+    "You are MediKiosk's clinical intake interviewer. Your only job is to ask the patient "
     "the next useful question; do not diagnose, recommend treatment, or prescribe medicine. "
     "Detect whether the patient uses Hindi, English, or Hinglish and reply in that same style. "
     "Use simple, respectful language and ask one focused question at a time. For pain, ask "
@@ -1549,11 +1582,6 @@ async def doctor_approved_case(case: ApprovedTrainingCase) -> ApprovedTrainingCa
     with local_path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
     return case
-    local_path = Path("training/approved_cases.jsonl")
-    local_path.parent.mkdir(parents=True, exist_ok=True)
-    with local_path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
-    return case
 
 
 @app.post("/ask-clinical-question", response_model=ConversationalQuestionResponse)
@@ -1584,7 +1612,7 @@ async def ask_clinical_question(request: TranscriptRequest) -> ConversationalQue
     lower = prompt_text.lower()
     hindi = any("\u0900" <= char <= "\u097f" for char in request.transcript)
     hinglish = any(word in lower for word in ("mere", "pet", "dard", "hai", "hue", "kaise"))
-    urgent = any(word in lower for word in ("chest pain", "breathing", "faint", "stroke", "बेहोश", "सीने"))
+    urgent = detect_red_flags(prompt_text)
     return ConversationalQuestionResponse(
         reply=reply,
         language="Hinglish" if hinglish else ("Hindi" if hindi else "English"),
@@ -1599,29 +1627,6 @@ async def extract_history(request: TranscriptRequest) -> PatientHistoryRecord:
     persisting it to patient_histories. Falls back seamlessly to clinical reasoning
     if the external AI API is unconfigured.
     """
-    try:
-        completion = client.beta.chat.completions.parse(
-            model=AI_MODEL,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": request.transcript},
-            ],
-            response_format=ClinicalHistorySummary,
-        )
-    except OpenAIError as exc:
-        logger.warning("OpenAI parse failed during extract-history; using local fallback summary: %s", exc)
-        parsed = _local_clinical_summary(request.transcript)
-        record = _persist_history(parsed)
-        if request.patient_id:
-            _store_patient_report(request.patient_id, parsed, report_type="summary")
-        return record
-
-    message = completion.choices[0].message
-
-    if message.refusal:
-        raise HTTPException(status_code=422, detail=f"Model refused to process transcript: {message.refusal}")
-
-    parsed = message.parsed
     parsed = None
     if _is_ai_available():
         try:
@@ -1660,97 +1665,6 @@ async def extract_from_image(file: UploadFile = File(...)) -> ClinicalHistorySum
     if not contents:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
-    storage_ready = True
-    try:
-        _require_supabase_configuration()
-    except HTTPException:
-        storage_ready = False
-
-    extension = os.path.splitext(file.filename or "")[1] or ".jpg"
-    object_path = f"{uuid.uuid4()}{extension}"
-    public_url = None
-
-    if storage_ready:
-        try:
-            supabase.storage.from_(MEDICAL_DOCUMENTS_BUCKET).upload(
-                object_path,
-                contents,
-                {"content-type": file.content_type or "application/octet-stream"},
-            )
-            public_url = supabase.storage.from_(MEDICAL_DOCUMENTS_BUCKET).get_public_url(object_path)
-        except Exception as exc:
-            logger.warning("Supabase Storage upload failed; using safe offline fallback: %s", exc)
-            storage_ready = False
-
-    if not storage_ready:
-        logger.warning("Using offline local extraction fallback for %s because Supabase storage is unavailable.", file.filename or "uploaded_document")
-        parsed = _safe_document_fallback(file.filename or "uploaded_document", contents)
-        return ClinicalHistorySummary(
-            chief_complaint=parsed.diagnoses[0] if parsed.diagnoses else "Medical document uploaded for review.",
-            hpi_socrates="The uploaded document was processed using the offline fallback path because the storage/AI backend was unavailable.",
-            past_medical_history=parsed.diagnoses,
-            current_medications=[Medication(name=m.name, dosage=m.dosage, frequency=m.frequency) for m in parsed.medications],
-            ayush_parameters=AyushParameters(
-                prakriti="Not available",
-                vikriti="Not available",
-                sara="Not available",
-                samhanana="Not available",
-                pramana="Not available",
-                satmya="Not available",
-                sattva="Not available",
-                ahara_shakti="Not available",
-                vyayama_shakti="Not available",
-                vaya="Not available",
-            ),
-            red_flags_detected=False,
-        )
-
-    try:
-        completion = client.beta.chat.completions.parse(
-            model=AI_MODEL,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": "Extract the structured clinical history from this prescription/document image.",
-                        },
-                        {"type": "image_url", "image_url": {"url": public_url}},
-                    ],
-                },
-            ],
-            response_format=ClinicalHistorySummary,
-        )
-    except OpenAIError as exc:
-        logger.warning("Vision model failed for extract-from-image: %s", exc)
-        fallback_summary = ClinicalHistorySummary(
-            chief_complaint="Clinical summary is pending while the local document processing fallback is used.",
-            hpi_socrates="A structured summary could not be generated from the uploaded document, so the app is running in safe fallback mode.",
-            past_medical_history=[],
-            current_medications=[],
-            ayush_parameters=AyushParameters(
-                prakriti="Not available",
-                vikriti="Not available",
-                sara="Not available",
-                samhanana="Not available",
-                pramana="Not available",
-                satmya="Not available",
-                sattva="Not available",
-                ahara_shakti="Not available",
-                vyayama_shakti="Not available",
-                vaya="Not available",
-            ),
-            red_flags_detected=False,
-        )
-        _persist_history(fallback_summary)
-        return fallback_summary
-
-    message = completion.choices[0].message
-
-    if message.refusal:
-        raise HTTPException(status_code=422, detail=f"Model refused to process image: {message.refusal}")
     filename = file.filename or "prescription.jpg"
     extension = os.path.splitext(filename)[1] or ".jpg"
     storage_path = f"uploads/{uuid.uuid4()}{extension}"
@@ -1834,6 +1748,7 @@ async def upload_document(file: UploadFile = File(...)) -> DocumentUploadResult:
     if not storage_ready:
         fallback = _safe_document_fallback(file.filename or storage_path, contents)
         return DocumentUploadResult(storage_path=storage_path, extracted_document=fallback)
+            logger.warning("Supabase Storage upload failed: %s", exc)
 
     if not public_url:
         uploads_dir = Path(__file__).parent / "uploads"
@@ -1911,32 +1826,6 @@ async def converse(request: ConverseRequest) -> ConversationStep:
     Stateless adaptive interview engine: returns the next question to ask
     with touch quick-reply options and emergency red-flag detection.
     """
-    messages = [{"role": "system", "content": CONVERSE_SYSTEM_PROMPT}]
-    if not request.history:
-        messages.append({"role": "user", "content": "[Interview starting. Ask the first question.]"})
-    else:
-        for turn in request.history:
-            role = "assistant" if turn.role == "assistant" else "user"
-            messages.append({"role": role, "content": turn.content})
-
-    try:
-        completion = client.beta.chat.completions.parse(
-            model=AI_MODEL,
-            messages=messages,
-            response_format=ConversationStep,
-        )
-    except OpenAIError as exc:
-        logger.warning("OpenAI parse failed during /converse; using local fallback conversation step: %s", exc)
-        return _fallback_conversation_step(request.history)
-
-    message = completion.choices[0].message
-
-    if message.refusal:
-        raise HTTPException(status_code=422, detail=f"Model refused to continue interview: {message.refusal}")
-
-    parsed = message.parsed
-    if parsed is None:
-        raise HTTPException(status_code=502, detail="Model did not return a parsed structured output.")
     if _is_ai_available():
         messages = [{"role": "system", "content": CONVERSE_SYSTEM_PROMPT}]
         if not request.history:
@@ -1958,10 +1847,11 @@ async def converse(request: ConverseRequest) -> ConversationStep:
         except Exception as exc:
             logger.warning("OpenAI converse failed, using clinical dialogue engine: %s", exc)
 
-    # Built-in clinical conversational AI fallback
-    history_dicts = [{"role": t.role, "content": t.content} for t in request.history]
-    step_dict = generate_local_conversation_step(history_dicts)
-    return ConversationStep(**step_dict)
+    # Built-in clinical conversational AI fallback: bilingual and illness-
+    # adaptive (see tests/test_backend_smoke.py), so the frontend's Guided
+    # Steps rail shows a generic numbered sequence rather than fixed named
+    # categories -- this engine doesn't guarantee a specific question order.
+    return _fallback_conversation_step(request.history)
 
 
 @app.post("/generate-summary", response_model=PatientHistoryRecord)
@@ -1980,27 +1870,6 @@ async def generate_summary(request: GenerateSummaryRequest) -> PatientHistoryRec
         docs_json = json.dumps([d.model_dump() for d in request.documents], indent=2)
         user_content_parts.append(f"Extracted data from {len(request.documents)} prior medical document(s):\n{docs_json}")
 
-    try:
-        completion = client.beta.chat.completions.parse(
-            model=AI_MODEL,
-            messages=[
-                {"role": "system", "content": GENERATE_SUMMARY_SYSTEM_PROMPT},
-                {"role": "user", "content": "\n\n".join(user_content_parts)},
-            ],
-            response_format=ClinicalHistorySummary,
-        )
-    except OpenAIError as exc:
-        logger.warning("OpenAI parse failed during /generate-summary; using local fallback summary: %s", exc)
-        parsed = _local_clinical_summary(request.transcript, request.documents)
-        record = _persist_history(parsed)
-        if request.patient_id:
-            _store_patient_report(request.patient_id, parsed, report_type="summary")
-        return record
-
-    message = completion.choices[0].message
-
-    if message.refusal:
-        raise HTTPException(status_code=422, detail=f"Model refused to synthesize summary: {message.refusal}")
     parsed = None
     if _is_ai_available():
         user_content_parts = []

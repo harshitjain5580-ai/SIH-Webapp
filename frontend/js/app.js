@@ -4,11 +4,11 @@
 
 import { ApiService } from './api.js';
 import { VoiceEngine } from './voice.js';
-import { KioskModule } from './kiosk.js?v=20260912';
 import { KioskModule } from './kiosk.js';
 import { ScannerModule } from './scanner.js';
 import { TriageModule } from './triage.js';
 import { DoctorModule } from './doctor.js';
+import { AuthModule } from './auth.js';
 
 export const App = {
   currentView: 'kiosk',
@@ -26,6 +26,10 @@ export const App = {
 
     // Expose to window for inline onclick handlers and cross-module calls
     window.App = this;
+
+    // Login gate: decides which role's views become reachable and starts
+    // the patient interview or opens the doctor's queue accordingly.
+    AuthModule.init();
   },
 
   bindGlobalNavigation() {
@@ -66,7 +70,6 @@ export const App = {
       voiceToggleBtn.addEventListener('click', () => {
         VoiceEngine.ttsEnabled = !VoiceEngine.ttsEnabled;
         voiceToggleBtn.classList.toggle('active', VoiceEngine.ttsEnabled);
-        this.showToast(VoiceEngine.ttsEnabled ? 'Charaka voice enabled' : 'Charaka voice muted', 'info');
         this.showToast(VoiceEngine.ttsEnabled ? 'Voice Assistant Enabled' : 'Voice Assistant Muted', 'info');
       });
     }
@@ -80,10 +83,6 @@ export const App = {
     if (dot && label) {
       if (isLive) {
         dot.className = 'status-dot';
-        label.textContent = 'Connected';
-      } else {
-        dot.className = 'status-dot offline';
-        label.textContent = 'Offline mode';
         label.textContent = 'Backend: Connected (FastAPI)';
       } else {
         dot.className = 'status-dot offline';
@@ -145,7 +144,6 @@ export const App = {
     const messageSpan = document.createElement('span');
     messageSpan.textContent = message;
     toast.append(iconSpan, document.createTextNode(' '), messageSpan);
-    toast.innerHTML = `<span>${icon}</span> <span>${message}</span>`;
 
     container.appendChild(toast);
 

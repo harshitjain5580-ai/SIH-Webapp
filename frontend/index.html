@@ -3,62 +3,174 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MediKiosk - Charaka AI Clinical History Assistant</title>
-  <meta name="description" content="Charaka AI-assisted clinical history intake kiosk, prescription document OCR, SOCRATES pain framework, AYUSH Dashavidha Pariksha, and triage management.">
   <title>MediKiosk - AI Clinical History Intake & Triage Platform</title>
   <meta name="description" content="AI-assisted clinical history intake kiosk, prescription document OCR, SOCRATES pain framework, AYUSH Dashavidha Pariksha, and triage management.">
-  
+
   <!-- Google Fonts: DM Sans -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400;1,9..40,600&display=swap" rel="stylesheet">
-  
+
   <!-- Design System Stylesheet strictly adhering to DESIGN.md -->
   <link rel="stylesheet" href="css/style.css?v=20260912">
-  <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
-  <div class="app-container">
-    
+  <!-- ================================================================
+       Login Gate: role selection (patient / doctor). See auth.js for
+       the important caveat that this is a navigation split, not real
+       backend authentication.
+       ================================================================ -->
+  <div class="login-screen" id="login-screen">
+    <div class="login-topbar">
+      <div class="login-brand">
+        <div class="brand-icon">✚</div>
+        <div class="brand-text">
+          <h1>MediKiosk</h1>
+          <span>Clinical AI Intake</span>
+        </div>
+      </div>
+      <button type="button" class="kiosk-help-btn"><span>🙋</span><span>Need help</span></button>
+    </div>
+
+    <div class="login-body">
+      <div class="login-card">
+        <div id="login-patient-heading">
+          <h2 class="login-title">Welcome. Let us start your visit.</h2>
+          <p class="login-subtitle">Sign in with your ABHA ID, or continue as a walk-in without any ID.</p>
+        </div>
+        <div id="login-doctor-heading" hidden>
+          <h2 class="login-title">Physician sign in</h2>
+          <p class="login-subtitle">Access patient intake summaries, triage alerts and the case repository.</p>
+        </div>
+
+        <div class="segmented-toggle login-role-toggle" id="login-role-toggle">
+          <button type="button" class="segmented-toggle-btn" data-login-role="patient">👤 Patient</button>
+          <button type="button" class="segmented-toggle-btn" data-login-role="doctor">🩺 Doctor</button>
+        </div>
+
+        <!-- Patient sign-in -->
+        <div id="login-patient-panel">
+          <div class="form-group">
+            <label class="form-label" for="login-abha-input">ABHA ID or ABHA Number</label>
+            <input type="text" class="form-control" id="login-abha-input" placeholder="91-9876543210@abdm">
+            <p class="login-hint">Printed on your Ayushman Bharat health card. 14 digits or name@abdm.</p>
+          </div>
+          <button type="button" class="btn btn-primary login-submit" id="btn-login-send-otp">Send OTP to my phone →</button>
+
+          <div class="login-divider"><span>OR</span></div>
+
+          <button type="button" class="login-option-row" id="btn-login-mobile">
+            <span class="login-option-icon">🔢</span>
+            <span class="login-option-text">
+              <strong>Use mobile number instead</strong>
+              <span class="login-option-subtitle">We will send a 6-digit code</span>
+            </span>
+          </button>
+          <button type="button" class="login-option-row" id="btn-login-walkin">
+            <span class="login-option-icon">🚶</span>
+            <span class="login-option-text">
+              <strong>I do not have an ABHA ID</strong>
+              <span class="login-option-subtitle">Continue as a walk-in patient</span>
+            </span>
+          </button>
+
+          <div class="login-notice">
+            <span>🔒</span>
+            <span>Your answers are shared only with the doctor who sees you today. Nothing is stored on this kiosk after your visit ends.</span>
+          </div>
+
+          <div class="login-sample-row">
+            <span>Quick sample patients:</span>
+            <button type="button" class="sample-chip login-sample-btn" data-abha="priya.patel@abdm">Priya (F/34)</button>
+            <button type="button" class="sample-chip login-sample-btn" data-abha="vikram.singh@abdm">Vikram (M/52)</button>
+            <button type="button" class="sample-chip login-sample-btn" data-abha="ananya.das@abdm">Ananya (F/28)</button>
+          </div>
+        </div>
+
+        <!-- Doctor sign-in -->
+        <div id="login-doctor-panel" hidden>
+          <div class="form-group">
+            <label class="form-label" for="login-doctor-email">Hospital email or Medical Council registration number</label>
+            <input type="text" class="form-control" id="login-doctor-email" placeholder="r.mehta@cityhospital.in">
+          </div>
+          <div class="form-group">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <label class="form-label" for="login-doctor-password" style="margin-bottom: 0;">Password</label>
+              <a href="#" class="login-forgot" onclick="return false;">Forgot password?</a>
+            </div>
+            <input type="password" class="form-control" id="login-doctor-password" placeholder="••••••••••••">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Department for this session</label>
+            <div class="login-dept-row" id="login-dept-row">
+              <button type="button" class="dept-chip active" data-dept="General Medicine">General Medicine</button>
+              <button type="button" class="dept-chip" data-dept="Cardiology">Cardiology</button>
+              <button type="button" class="dept-chip" data-dept="AYUSH">AYUSH</button>
+              <button type="button" class="dept-chip" data-dept="Emergency">Emergency</button>
+            </div>
+          </div>
+          <button type="button" class="btn btn-primary login-submit" id="btn-login-doctor">Sign in to review queue →</button>
+
+          <div class="login-divider"><span>OR</span></div>
+
+          <button type="button" class="login-option-row login-option-row-center" id="btn-login-sso">
+            <span class="login-option-icon">🏥</span>
+            <span class="login-option-text"><strong>Continue with hospital SSO</strong></span>
+          </button>
+
+          <div class="login-notice login-notice-warning">
+            <span>⚠️</span>
+            <span>Clinical access is logged. Every summary you open, amend or push to the HIS is recorded against your registration number.</span>
+          </div>
+        </div>
+
+        <p class="login-demo-disclaimer">
+          Prototype note: this screen routes you to the right interface. It does not check real passwords, send real OTPs, or connect to a hospital SSO provider.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-container" id="app-container" hidden>
+
     <!-- Sidebar Navigation -->
     <aside class="app-sidebar" id="app-sidebar">
       <div class="sidebar-brand">
         <div class="brand-icon">✚</div>
         <div class="brand-text">
           <h1>MediKiosk</h1>
-          <span>Charaka AI Assistant</span>
           <span>Clinical AI Intake</span>
         </div>
       </div>
 
       <nav class="sidebar-nav">
-        <div class="nav-section-title">Patient Intake</div>
-        
-        <button class="nav-item active" data-view="kiosk" id="nav-kiosk">
+        <div class="nav-section-title" data-role="patient">Patient Intake</div>
+
+        <button class="nav-item active" data-view="kiosk" data-role="patient" id="nav-kiosk">
           <span class="nav-icon">🎙️</span>
           <span>Intake Kiosk</span>
         </button>
 
-        <button class="nav-item" data-view="scanner" id="nav-scanner">
+        <button class="nav-item" data-view="scanner" data-role="patient" id="nav-scanner">
           <span class="nav-icon">📄</span>
           <span>Document OCR</span>
         </button>
 
-        <div class="nav-section-title">Clinical Operations</div>
+        <div class="nav-section-title" data-role="doctor">Clinical Operations</div>
 
-        <button class="nav-item" data-view="triage" id="nav-triage">
+        <button class="nav-item" data-view="triage" data-role="doctor" id="nav-triage">
           <span class="nav-icon">🚨</span>
           <span>Triage & Waiting Room</span>
           <span class="badge badge-primary" id="sidebar-triage-badge">Live</span>
         </button>
 
-        <button class="nav-item" data-view="doctor-review" id="nav-doctor-review">
+        <button class="nav-item" data-view="doctor-review" data-role="doctor" id="nav-doctor-review">
           <span class="nav-icon">🩺</span>
           <span>Physician Review</span>
         </button>
 
-        <button class="nav-item" data-view="training-cases" id="nav-training-cases">
+        <button class="nav-item" data-view="training-cases" data-role="doctor" id="nav-training-cases">
           <span class="nav-icon">📚</span>
           <span>Case Repository</span>
         </button>
@@ -73,15 +185,14 @@
       <div class="sidebar-footer">
         <div class="status-indicator">
           <div class="status-dot" id="backend-status-dot"></div>
-          <span id="backend-status-label">Checking connection...</span>
-        </div>
-        <div style="font-size: 0.72rem; color: var(--utd-color-textmuted); line-height: 1.3;">
-          Health records ready
           <span id="backend-status-label">Checking Backend...</span>
         </div>
         <div style="font-size: 0.72rem; color: var(--utd-color-textmuted); line-height: 1.3;">
           ABDM Sandbox & FHIR Mock Ready
         </div>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-logout" style="width: 100%;">
+          🚪 Switch user / Log out
+        </button>
       </div>
     </aside>
 
@@ -101,7 +212,6 @@
         </div>
 
         <div class="header-actions">
-          <button class="voice-master-toggle active" id="btn-toggle-voice-assistant" title="Toggle Charaka voice read-aloud assistant">
           <button class="voice-master-toggle active" id="btn-toggle-voice-assistant" title="Toggle voice read-aloud assistant">
             <span>🔊</span>
             <span>Voice Readout</span>
@@ -152,165 +262,126 @@
               </div>
             </div>
 
-            <!-- ABHA ID Quick Verification Toolbar -->
-            <div class="card" style="padding: 16px 20px;">
-              <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
-                <div style="flex-grow: 1; min-width: 260px;">
-                  <label class="form-label" style="margin-bottom: 4px; font-size: 0.82rem;">
-                    Ayushman Bharat Health Account (ABHA ID / Number)
-                  </label>
-                  <div style="display: flex; gap: 10px;">
-                    <input type="text" class="form-control" id="kiosk-abha-input" placeholder="e.g. 91-9876543210@abdm or priya.patel@abdm">
-                    <button class="btn btn-primary" id="btn-verify-abha">Verify ABHA</button>
-                  </div>
-                </div>
-
-                <div>
-                  <span style="font-size: 0.78rem; color: var(--utd-color-textmuted); display: block; margin-bottom: 4px;">Quick Sample Patients:</span>
-                  <div style="display: flex; gap: 6px;">
-                    <button class="sample-chip sample-abha-btn" data-abha="priya.patel@abdm">Priya (F/34)</button>
-                    <button class="sample-chip sample-abha-btn" data-abha="vikram.singh@abdm">Vikram (M/52)</button>
-                    <button class="sample-chip sample-abha-btn" data-abha="ananya.das@abdm">Ananya (F/28)</button>
-                  </div>
-                </div>
+            <!-- Gender pre-step: asked once at the start of every session -->
+            <div class="gender-selection-card" id="kiosk-gender-selection">
+              <div>
+                <h3>Before we begin</h3>
+                <p>Please select the gender you identify with. This helps ask relevant health questions.</p>
+              </div>
+              <div class="gender-options" role="group" aria-label="Gender selection">
+                <button type="button" class="gender-option-btn" data-gender="Male">Male</button>
+                <button type="button" class="gender-option-btn" data-gender="Female">Female</button>
+                <button type="button" class="gender-option-btn" data-gender="Other or prefer not to say">Other / Prefer not to say</button>
               </div>
             </div>
 
-            <!-- Grid: Interactive Interview Stream + Clinical Tracking Framework -->
-            <div class="grid-sidebar-layout">
-              
-              <!-- Left Column: Conversational Chat & Input Dock -->
-              <div style="display: flex; flex-direction: column; gap: 16px;">
-                
-                <!-- Chat Transcript Box -->
-                <div class="gender-selection-card" id="kiosk-gender-selection">
+            <!-- Redesigned Patient Question Screen: pick a direction -->
+            <div class="kiosk-layout-switch">
+              <span class="kiosk-layout-switch-label">Screen design:</span>
+              <div class="segmented-toggle" id="kiosk-layout-toggle">
+                <button type="button" class="segmented-toggle-btn" data-layout="a">One Question</button>
+                <button type="button" class="segmented-toggle-btn" data-layout="b">Guided Steps</button>
+              </div>
+            </div>
+
+            <!-- Layout A: One Question At A Time -->
+            <div class="kiosk-v2-card" id="kiosk-layout-a" hidden>
+              <div class="kiosk-v2-topbar">
+                <div class="kiosk-lang-toggle" id="kiosk-lang-toggle-a">
+                  <button type="button" class="lang-btn" data-lang="en">English</button>
+                  <button type="button" class="lang-btn" data-lang="hi">हिंदी</button>
+                  <button type="button" class="lang-btn" data-lang="hinglish">Hinglish</button>
+                </div>
+                <button type="button" class="kiosk-help-btn"><span>🙋</span><span>Need help</span></button>
+              </div>
+
+              <div class="kiosk-v2-progress">
+                <span class="kiosk-v2-progress-label" id="kiosk-progress-label-a">Question 1 of 6</span>
+                <div class="kiosk-v2-progress-bar" id="kiosk-progress-bar-a"></div>
+              </div>
+
+              <div class="kiosk-v2-body">
+                <div class="kiosk-v2-question-col">
+                  <div class="kiosk-v2-question-row">
+                    <div class="kiosk-v2-ai-chip">AI</div>
+                    <p class="kiosk-v2-question-en" id="kiosk-question-a"></p>
+                  </div>
+                  <div class="kiosk-v2-answer-grid" id="kiosk-answer-grid-a"></div>
+                  <div class="kiosk-v2-typebox" id="kiosk-typebox-a" hidden>
+                    <input type="text" class="kiosk-text-input" id="kiosk-text-input-a" placeholder="Speak or type symptoms (बोलें या लिखें)...">
+                    <button type="button" class="btn btn-primary" id="kiosk-send-btn-a">Send →</button>
+                  </div>
+                </div>
+
+                <div class="kiosk-v2-sidebar">
+                  <div class="kiosk-v2-sidebar-label">Your answers so far</div>
+                  <div class="kiosk-v2-sidebar-card" id="kiosk-sidebar-card-a" hidden>
+                    <div class="kiosk-v2-sidebar-heading">What brings you in</div>
+                    <div class="kiosk-v2-sidebar-value" id="kiosk-sidebar-value-a"></div>
+                    <button type="button" class="btn btn-secondary btn-sm" id="kiosk-change-answer-a">Change answer</button>
+                  </div>
+                  <div class="kiosk-v2-sidebar-hint" id="kiosk-sidebar-hint-a"></div>
+                </div>
+              </div>
+
+              <div class="kiosk-v2-dock">
+                <button type="button" class="btn btn-secondary" id="kiosk-repeat-a"><span>🔊</span><span>Repeat question</span></button>
+                <div class="kiosk-v2-mic-block">
+                  <button type="button" class="mic-action-btn kiosk-v2-mic-lg" id="kiosk-mic-btn-a" title="Speak to MediKiosk">🎤</button>
+                  <div class="kiosk-v2-mic-label">Tap and speak<br><span>your answer</span></div>
+                </div>
+                <button type="button" class="btn btn-secondary" id="kiosk-type-toggle-a"><span>⌨️</span><span>Type instead</span></button>
+              </div>
+
+              <button type="button" class="btn btn-primary kiosk-v2-finish" id="btn-finish-kiosk-a" style="display: none;">
+                ✨ Compile &amp; Review Summary
+              </button>
+            </div>
+
+            <!-- Layout B: Guided Steps -->
+            <div class="kiosk-v2-card kiosk-v2-guided" id="kiosk-layout-b" hidden>
+              <div class="kiosk-v2-guided-rail">
+                <div class="kiosk-v2-guided-brand">
+                  <div class="brand-icon" style="width: 36px; height: 36px; font-size: 18px;">✚</div>
                   <div>
-                    <h3>Before we begin</h3>
-                    <p>Please select the gender you identify with. This helps Charaka ask relevant health questions.</p>
-                  </div>
-                  <div class="gender-options" role="group" aria-label="Gender selection">
-                    <button type="button" class="gender-option-btn" data-gender="Male">Male</button>
-                    <button type="button" class="gender-option-btn" data-gender="Female">Female</button>
-                    <button type="button" class="gender-option-btn" data-gender="Other or prefer not to say">Other / Prefer not to say</button>
+                    <div style="font-weight: 700; font-size: 0.95rem;">MediKiosk</div>
+                    <div style="font-size: 0.7rem; text-transform: uppercase; color: var(--utd-color-textmuted); letter-spacing: 0.05em;">Walk-in Patient</div>
                   </div>
                 </div>
-                <div class="kiosk-chat-box" id="kiosk-chat-stream">
-                  <!-- Dynamic Turns Populated by JS -->
-                </div>
-
-                <!-- Quick-Reply Tap Options (Touchscreen Accessibility) -->
-                <div>
-                  <span style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--utd-color-textmuted); letter-spacing: 0.05em;">
-                    Touch Quick-Answers (त्वरित उत्तर):
-                  </span>
-                  <div class="quick-replies-container" id="kiosk-quick-replies">
-                    <!-- Populated dynamically by kiosk.js -->
-                  </div>
-                </div>
-
-                <!-- Dual-Mode Input Dock (Speech + Keyboard) -->
-                <div class="kiosk-input-dock">
-                  <div class="kiosk-input-controls">
-                    
-                    <!-- Voice Microphone Button -->
-                    <button class="mic-action-btn" id="kiosk-mic-btn" title="Speak to Charaka (Click to record voice in Hindi/English/Hinglish)">
-                    <button class="mic-action-btn" id="kiosk-mic-btn" title="Speak to MediKiosk (Click to record voice in Hindi/English/Hinglish)">
-                      🎤
-                    </button>
-
-                    <!-- Text Field -->
-                    <input type="text" class="kiosk-text-input" id="kiosk-text-input" placeholder="Speak or type symptoms (बोलें या लिखें)...">
-
-                    <!-- Send Button -->
-                    <button class="btn btn-primary btn-lg" id="kiosk-send-btn">
-                      Send →
-                    </button>
-                  </div>
-
-                  <!-- Audio Waveform Pulse Bar -->
-                  <div style="display: flex; align-items: center; justify-content: space-between;">
-                    <div class="voice-wave-container" id="kiosk-voice-wave">
-                      <div class="wave-bar"></div>
-                      <div class="wave-bar"></div>
-                      <div class="wave-bar"></div>
-                      <div class="wave-bar"></div>
-                      <div class="wave-bar"></div>
-                      <span style="font-size: 0.78rem; color: var(--utd-color-textmuted); margin-left: 8px;">
-                        Dual-Mode: Speech Recognition & Large Touch Controls
-                      </span>
-                    </div>
-
-                    <button class="btn btn-primary btn-sm" id="btn-finish-kiosk" style="display: none;">
-                      ✨ Compile & Review Summary
-                    </button>
-                  </div>
-                </div>
-
+                <div class="kiosk-v2-guided-steps" id="kiosk-steps-rail-b"></div>
+                <button type="button" class="btn btn-secondary kiosk-v2-guided-help">🙋 Call for help</button>
               </div>
 
-              <!-- Right Column: Live Clinical Assessment Tracking -->
-              <div style="display: flex; flex-direction: column; gap: 16px;">
-                
-                <!-- SOCRATES Pain Framework Tracker -->
-                <div class="card">
-                  <div class="card-header">
-                    <h3 class="card-title">
-                      <span>🩺</span>
-                      <span>SOCRATES Pain Matrix</span>
-                    </h3>
+              <div class="kiosk-v2-guided-main">
+                <div class="kiosk-v2-guided-topbar">
+                  <div class="kiosk-lang-toggle" id="kiosk-lang-toggle-b">
+                    <button type="button" class="lang-btn" data-lang="en">English</button>
+                    <button type="button" class="lang-btn" data-lang="hi">हिंदी</button>
+                    <button type="button" class="lang-btn" data-lang="hinglish">Hinglish</button>
                   </div>
-                  <div class="card-body">
-                    <p style="font-size: 0.8rem; color: var(--utd-color-textmuted); margin-bottom: 12px;">
-                      Real-time extraction of clinical symptom characteristics:
-                    </p>
-                    <div class="clinical-tracker-grid">
-                      <div class="tracker-badge-item" id="soc-site">Site (स्थान)</div>
-                      <div class="tracker-badge-item" id="soc-onset">Onset (शुरुआत)</div>
-                      <div class="tracker-badge-item" id="soc-character">Character (लक्षण)</div>
-                      <div class="tracker-badge-item" id="soc-radiation">Radiation (फैलाव)</div>
-                      <div class="tracker-badge-item" id="soc-associated">Associated (अन्य)</div>
-                      <div class="tracker-badge-item" id="soc-timing">Timing (समय)</div>
-                      <div class="tracker-badge-item" id="soc-exacerbating">Exacerbating (बढ़ना)</div>
-                      <div class="tracker-badge-item" id="soc-severity">Severity (गंभीरता)</div>
-                    </div>
+                  <div style="display: flex; gap: 8px;">
+                    <button type="button" class="btn btn-secondary btn-sm">👁️ Bigger text</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="kiosk-repeat-b">🔊 Read aloud</button>
                   </div>
                 </div>
 
-                <!-- AYUSH Dashavidha Pariksha Matrix -->
-                <div class="card">
-                  <div class="card-header">
-                    <h3 class="card-title">
-                      <span>🌿</span>
-                      <span>AYUSH Pariksha</span>
-                    </h3>
+                <div class="kiosk-v2-guided-content">
+                  <div>
+                    <div class="kiosk-v2-progress-label" id="kiosk-progress-label-b">Step 1 of 6</div>
+                    <p class="kiosk-v2-question-en" id="kiosk-question-b" style="margin-top: 8px;"></p>
                   </div>
-                  <div class="card-body">
-                    <p style="font-size: 0.8rem; color: var(--utd-color-textmuted); margin-bottom: 12px;">
-                      Dashavidha tenfold constitutional assessment:
-                    </p>
-                    <div style="display: flex; flex-direction: column; gap: 8px; font-size: 0.85rem;">
-                      <div style="display: flex; justify-content: space-between; padding: 6px 10px; background: #F4FAF6; border-radius: var(--utd-border-radius);">
-                        <strong>Prakriti (Constitution):</strong>
-                        <span class="badge badge-primary">Pitta-Vata</span>
-                      </div>
-                      <div style="display: flex; justify-content: space-between; padding: 6px 10px; background: #F4FAF6; border-radius: var(--utd-border-radius);">
-                        <strong>Vikriti (Imbalance):</strong>
-                        <span style="color: var(--utd-color-textprimary); font-weight: 500;">Assessing...</span>
-                      </div>
-                      <div style="display: flex; justify-content: space-between; padding: 6px 10px; background: #F4FAF6; border-radius: var(--utd-border-radius);">
-                        <strong>Ahara Shakti (Agni):</strong>
-                        <span style="color: var(--utd-color-textprimary); font-weight: 500;">Manda Agni</span>
-                      </div>
-                      <div style="display: flex; justify-content: space-between; padding: 6px 10px; background: #F4FAF6; border-radius: var(--utd-border-radius);">
-                        <strong>Sattva (Mental Resilience):</strong>
-                        <span style="color: var(--utd-color-textprimary); font-weight: 500;">Madhyama</span>
-                      </div>
-                    </div>
-                  </div>
+                  <div class="kiosk-v2-answer-rows" id="kiosk-answer-rows-b"></div>
                 </div>
 
+                <div class="kiosk-v2-guided-dock">
+                  <button type="button" class="mic-action-btn" id="kiosk-mic-btn-b" title="Speak to MediKiosk">🎤</button>
+                  <input type="text" class="kiosk-text-input" id="kiosk-text-input-b" style="flex-grow: 1;" placeholder="Speak or type symptoms (बोलें या लिखें)...">
+                  <button type="button" class="btn btn-primary" id="kiosk-send-btn-b">Next →</button>
+                </div>
+                <button type="button" class="btn btn-primary kiosk-v2-finish" id="btn-finish-kiosk-b" style="display: none;">
+                  ✨ Compile &amp; Review Summary
+                </button>
               </div>
-
             </div>
 
           </div>
@@ -637,7 +708,6 @@
                 Doctor-Reviewed Case Repository & Fine-Tuning Sandbox
               </h3>
               <p style="font-size: 0.88rem; color: var(--utd-color-textmuted); margin-top: 4px;">
-                Curated clinical cases approved by physicians to improve safe bilingual history questions.
                 Curated clinical cases approved by physicians to refine Qwen-2.5 local bilingual clinical history intake models.
               </p>
             </div>
@@ -661,7 +731,6 @@
                       Patient presented with retrosternal pressure radiating to jaw. Model successfully extracted all 8 SOCRATES parameters and flagged emergency red flag within 2 dialogue turns.
                     </p>
                     <div style="margin-top: 8px; display: flex; gap: 6px;">
-                      <span class="badge badge-primary">Charaka AI Assistant</span>
                       <span class="badge badge-primary">Qwen-2.5-1.5B</span>
                       <span class="badge badge-warning">Bilingual (Hindi/English)</span>
                     </div>
@@ -717,6 +786,5 @@
 
   <!-- Main JavaScript Bundle (ES Modules) -->
   <script type="module" src="js/app.js?v=20260912"></script>
-  <script type="module" src="js/app.js"></script>
 </body>
 </html>
