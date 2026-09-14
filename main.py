@@ -1814,11 +1814,6 @@ async def upload_document(file: UploadFile = File(...)) -> DocumentUploadResult:
     except HTTPException:
         storage_ready = False
 
-    extension = os.path.splitext(file.filename or "")[1] or ".jpg"
-    storage_path = f"{uuid.uuid4()}{extension}"
-    public_url = None
-
-    if storage_ready:
     filename = file.filename or "document.jpg"
     extension = os.path.splitext(filename)[1] or ".jpg"
     storage_path = f"uploads/{uuid.uuid4()}{extension}"
@@ -1839,43 +1834,6 @@ async def upload_document(file: UploadFile = File(...)) -> DocumentUploadResult:
     if not storage_ready:
         fallback = _safe_document_fallback(file.filename or storage_path, contents)
         return DocumentUploadResult(storage_path=storage_path, extracted_document=fallback)
-
-    try:
-        completion = client.beta.chat.completions.parse(
-            model=AI_MODEL,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a medical document extraction engine. Extract every diagnosis, "
-                        "medication (with dosage and frequency), lab/imaging investigation result "
-                        "(with its value and reference range, flagging is_abnormal when the value "
-                        "falls outside that range), and procedure or surgery mentioned in the "
-                        "provided medical document image."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "Extract all structured clinical data from this document image."},
-                        {"type": "image_url", "image_url": {"url": public_url}},
-                    ],
-                },
-            ],
-            response_format=ExtractedDocument,
-        )
-    except OpenAIError as exc:
-        logger.warning("Vision model failed during upload-document: %s", exc)
-        fallback = _local_document_fallback(contents, file.filename or storage_path)
-        if fallback is None:
-            fallback = _safe_document_fallback(file.filename or storage_path, contents)
-        return DocumentUploadResult(storage_path=storage_path, extracted_document=fallback)
-
-    message = completion.choices[0].message
-
-    if message.refusal:
-        raise HTTPException(status_code=422, detail=f"Model refused to process image: {message.refusal}")
-            logger.warning("Supabase Storage upload failed: %s", exc)
 
     if not public_url:
         uploads_dir = Path(__file__).parent / "uploads"
